@@ -4,6 +4,7 @@ import { db } from './db';
 import { AppError } from './errors';
 import type { Message, User } from './types';
 import { getAura } from './market';
+import { deleteRemoteMessage, editRemoteMessage, insertRemoteMessage, pinRemoteMessage, toggleRemoteReaction, updateRemoteProfile } from './cloud';
 
 export function dmId(a: string, b: string): string {
   if (a === b) return `dm:${a}:${a}`;
@@ -39,7 +40,7 @@ export function hasAccess(channel: string, userId: string): boolean {
   return false;
 }
 
-export function sendMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string }): Message {
+export function sendMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string }): Message | Promise<Message> {
   if (!hasAccess(input.channel, input.userId)) throw new AppError('err.notMember');
   const text = input.text.replace(/\r\n?/g, '\n').trim();
   const user = db.get().users[input.userId];
@@ -51,6 +52,10 @@ export function sendMessage(input: { channel: string; userId: string; text: stri
   if (text.length > max) throw new AppError('err.messageLong');
   if (input.image && (!/^data:image\/jpeg;base64,[a-zA-Z0-9+/=]+$/.test(input.image) || input.image.length > imageMax)) throw new AppError('err.imageTooBig');
   if (input.sticker && !/^[\p{Extended_Pictographic}\u200d\ufe0f\u{1f1e6}-\u{1f1ff}]{1,24}$/u.test(input.sticker)) throw new AppError('err.badText');
+  const dm = parseDM(input.channel);
+  if (dm && dm[0] !== dm[1] && dm.every((id) => db.get().users[id]?.serverBacked)) {
+    return insertRemoteMessage({ ...input, text });
+  }
   const id = uid(18);
   const msg: Message = { id, ch: input.channel, by: input.userId, text, ts: Date.now(), reactions: {}, reply: input.reply, sticker: input.sticker, image: input.image };
   db.transaction((d) => {
@@ -72,8 +77,12 @@ export function updateRead(userId: string, channel: string, at = Date.now()): vo
   }
 }
 
-export function addReaction(channel: string, messageId: string, userId: string, emoji: string): void {
+export function addReaction(channel: string, messageId: string, userId: string, emoji: string): void | Promise<void> {
   if (!/^\p{Extended_Pictographic}.{0,5}$/u.test(emoji)) throw new AppError('err.badText');
+  const dm = parseDM(channel);
+  if (dm && dm[0] !== dm[1] && dm.every((id) => db.get().users[id]?.serverBacked)) {
+    return toggleRemoteReaction(channel, messageId, userId, emoji);
+  }
   db.transaction((d) => {
     const msg = d.msgs[channel]?.find((m) => m.id === messageId);
     if (!msg || !hasAccess(channel, userId)) throw new AppError('err.notMember');
@@ -83,12 +92,16 @@ export function addReaction(channel: string, messageId: string, userId: string, 
   });
 }
 
-export function editMessage(channel: string, messageId: string, userId: string, text: string): void {
+export function editMessage(channel: string, messageId: string, userId: string, text: string): void | Promise<void> {
   const clean = text.trim().replace(/\r\n?/g, '\n');
   if (!clean) throw new AppError('err.emptyMessage');
   const user = db.get().users[userId];
   const max = user && getAura(user)?.tier === 'nova' ? LIMITS.messageNova : LIMITS.message;
   if (clean.length > max) throw new AppError('err.messageLong');
+  const dm = parseDM(channel);
+  if (dm && dm[0] !== dm[1] && dm.every((id) => db.get().users[id]?.serverBacked)) {
+    return editRemoteMessage(channel, messageId, userId, clean);
+  }
   db.transaction((d) => {
     const msg = d.msgs[channel]?.find((m) => m.id === messageId);
     if (!msg || msg.by !== userId) throw new AppError('err.notMember');
@@ -97,7 +110,11 @@ export function editMessage(channel: string, messageId: string, userId: string, 
   });
 }
 
-export function deleteMessage(channel: string, messageId: string, userId: string): void {
+export function deleteMessage(channel: string, messageId: string, userId: string): void | Promise<void> {
+  const dm = parseDM(channel);
+  if (dm && dm[0] !== dm[1] && dm.every((id) => db.get().users[id]?.serverBacked)) {
+    return deleteRemoteMessage(channel, messageId, userId);
+  }
   db.transaction((d) => {
     const msg = d.msgs[channel]?.find((m) => m.id === messageId);
     if (!msg || msg.by !== userId) throw new AppError('err.notMember');
@@ -105,8 +122,12 @@ export function deleteMessage(channel: string, messageId: string, userId: string
   });
 }
 
-export function pinMessage(channel: string, messageId: string, userId: string): void {
+export function pinMessage(channel: string, messageId: string, userId: string): void | Promise<void> {
   if (!hasAccess(channel, userId)) throw new AppError('err.notMember');
+  const dm = parseDM(channel);
+  if (dm && dm[0] !== dm[1] && dm.every((id) => db.get().users[id]?.serverBacked)) {
+    return pinRemoteMessage(channel, messageId, userId);
+  }
   db.transaction((d) => {
     const msg = d.msgs[channel]?.find((m) => m.id === messageId);
     if (!msg) throw new AppError('err.notMember');
@@ -115,7 +136,9 @@ export function pinMessage(channel: string, messageId: string, userId: string): 
   });
 }
 
-export function setPresence(userId: string, presence: User['presence'], statusText?: string): void {
+export function setPresence(userId: string, presence: User['presence'], statusText?: string): void | Promise<void> {
+  const currentUser = db.get().users[userId];
+  if (currentUser?.serverBacked) return updateRemoteProfile(userId, { presence, statusText });
   db.transaction((d) => {
     const user = d.users[userId];
     if (!user || user.bot) return;

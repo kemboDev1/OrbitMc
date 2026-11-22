@@ -1,5 +1,5 @@
 export type ID = string;
-export type Lang = 'en' | 'ru';
+export type Lang = 'en' | 'ru' | 'uz';
 export type Presence = 'online' | 'idle' | 'dnd' | 'offline';
 export type AuraTier = 'ember' | 'flare' | 'nova';
 export type Role = 'owner' | 'mod' | 'member';
@@ -23,6 +23,7 @@ export interface User {
   createdAt: number;
   /** Built-in demo contact that answers on its own. */
   bot?: boolean;
+  serverBacked?: boolean;
   aura: AuraSub | null;
   sparks: number;
   inventory: ID[];

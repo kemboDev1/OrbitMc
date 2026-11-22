@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { passwordScore } from '../lib/crypto';
-import { register, signIn, validateName, validatePassword } from '../data/auth';
+import { register, resetPassword, signIn } from '../data/auth';
 import { AppError } from '../data/errors';
 import { Icon } from './Icons';
 import { useI18n } from '../i18n';
@@ -12,13 +12,16 @@ import { tell } from './Toast';
 export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: () => void; onCancel?: () => void; initial?: 'signin' | 'signup' }) {
   const { t, lang } = useI18n();
   const [mode, setMode] = useState(initial);
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(true);
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState('');
   const [resetOpen, setResetOpen] = useState(false);
   const score = useMemo(() => passwordScore(password), [password]);
 
@@ -26,15 +29,36 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
     e.preventDefault();
     if (busy) return;
     setError('');
+    setNotice('');
     setBusy(true);
     try {
-      if (mode === 'signup') await register({ username, name, password, remember });
-      else await signIn({ username, password, remember });
+      const result = mode === 'signup'
+        ? await register({ email, username, name, password })
+        : await signIn({ email, password });
+      if (result.needsEmailConfirmation) {
+        setNotice(t('authEmailConfirmation'));
+        return;
+      }
       onDone();
     } catch (e) {
       setError(e instanceof AppError ? t(e.key) : t('err.generic'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const submitReset = async (e: FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+    setResetBusy(true);
+    try {
+      await resetPassword(email);
+      setResetOpen(false);
+      tell(t('authResetSent'), 'good');
+    } catch (e) {
+      setResetError(e instanceof AppError ? t(e.key) : t('err.generic'));
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -61,6 +85,8 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
             <button type="button" className={`lang-chip ${lang === 'en' ? 'selected' : ''}`} onClick={() => language.set('en')}>EN</button>
             <span>·</span>
             <button type="button" className={`lang-chip ${lang === 'ru' ? 'selected' : ''}`} onClick={() => language.set('ru')}>RU</button>
+            <span>·</span>
+            <button type="button" className={`lang-chip ${lang === 'uz' ? 'selected' : ''}`} onClick={() => language.set('uz')}>UZ</button>
           </div>
           <div className="auth-eyebrow"><span className="live-dot"/>{mode === 'signin' ? t('authCorner') : t('authMake')}</div>
           <h1>{mode === 'signin' ? t('welcome') : t('createSub')}</h1>
@@ -72,12 +98,14 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
           </div>
 
           <form onSubmit={submit} className="auth-form">
-            {mode === 'signup' && <label className="field-label">{t('displayName')}<input className="field-input" autoComplete="name" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder={lang === 'ru' ? 'Алекс' : 'Alex'} required /></label>}
-            <label className="field-label">{t('username')}<span className="input-prefix-wrap"><span className="input-prefix">@</span><input className="field-input prefix-field" autoComplete="username" maxLength={24} minLength={4} value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))} placeholder="yourname" required /></span><span className="field-hint">{lang === 'ru' ? '4–20 латинских букв, цифр или _' : '4–20 letters, numbers or underscores'}</span></label>
-            <label className="field-label">{t('password')}<span className="password-field-wrap"><input className="field-input" type={visible ? 'text' : 'password'} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={lang === 'ru' ? 'Не короче 10 символов' : 'At least 10 characters'} required /><button className="password-eye" type="button" aria-label={visible ? t('hide') : t('show')} onClick={() => setVisible((v) => !v)}><Icon name={visible ? 'eyeOff' : 'eye'} size={17}/></button></span>
+            <label className="field-label">{t('email')}<input className="field-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></label>
+            {mode === 'signup' && <label className="field-label">{t('displayName')}<input className="field-input" autoComplete="name" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('displayNamePlaceholder')} required /></label>}
+            {mode === 'signup' && <label className="field-label">{t('username')}<span className="input-prefix-wrap"><span className="input-prefix">@</span><input className="field-input prefix-field" autoComplete="username" maxLength={20} minLength={4} value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))} placeholder="yourname" required /></span><span className="field-hint">{t('usernameHint')}</span></label>}
+            <label className="field-label">{t('password')}<span className="password-field-wrap"><input className="field-input" type={visible ? 'text' : 'password'} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('passwordHint')} required /><button className="password-eye" type="button" aria-label={visible ? t('hide') : t('show')} onClick={() => setVisible((v) => !v)}><Icon name={visible ? 'eyeOff' : 'eye'} size={17}/></button></span>
               {mode === 'signup' && <span className={`strength-meter strength-${score}`}><span className="strength-track"><i/><i/><i/><i/></span><span>{t(`strength${score}`)}</span></span>}
             </label>
-            <div className="auth-options"><label className="check-line"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}/><span className="check-box"><Icon name="check" size={12}/></span><span>{t('remember')}</span></label>{mode === 'signin' && <button className="text-action" type="button" onClick={() => setResetOpen(true)}>{t('resetPassword')}</button>}</div>
+            <div className="auth-options">{mode === 'signin' && <button className="text-action" type="button" onClick={() => { setResetError(''); setResetOpen(true); }}>{t('resetPassword')}</button>}</div>
+            {notice && <div className="inline-notice" role="status">{notice}</div>}
             {error && <div className="inline-error" role="alert"><Icon name="info" size={16}/><span>{error}</span></div>}
             <button className="btn btn-primary auth-submit" type="submit" disabled={busy}>{busy ? <span className="spinner"/> : <span>{mode === 'signin' ? t('signIn') : t('signUp')}</span>}<Icon name="arrowUpRight" size={17}/></button>
           </form>
@@ -86,7 +114,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
         <footer className="auth-footer"><span>© ORBITMC 2025</span><span className="auth-footer-line"/><span>{t('authFooter')}</span></footer>
       </section>
     </div>
-    <Modal open={resetOpen} onClose={() => setResetOpen(false)} title={t('resetPassword')} subtitle={t('recoveryHint')} size="sm"><button className="btn btn-primary btn-full" onClick={() => setResetOpen(false)}>{t('backToApp')}</button></Modal>
+    <Modal open={resetOpen} onClose={() => setResetOpen(false)} title={t('resetPassword')} subtitle={t('recoveryHint')} size="sm"><form className="stack-form" onSubmit={submitReset}><label className="field-label">{t('email')}<input className="field-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>{resetError && <div className="inline-error" role="alert">{resetError}</div>}<button className="btn btn-primary btn-full" type="submit" disabled={resetBusy}>{resetBusy ? t('loading') : t('sendResetEmail')}</button></form></Modal>
   </main>;
 }
 

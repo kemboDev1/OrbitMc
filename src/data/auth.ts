@@ -1,14 +1,16 @@
 import { LIMITS } from '../config';
-import { hashPassword, safeEqual } from '../lib/crypto';
-import { uid } from '../lib/util';
 import { db } from './db';
 import { AppError } from './errors';
+import { fetchProfile, syncRemoteWorkspace, updateRemoteProfile } from './cloud';
+import { requireSupabase } from '../lib/supabase';
 import { session } from './session';
 import type { User } from './types';
 
-export type AuthResult = { user: User; isNew: boolean };
+export type AuthResult = { user: User; isNew: boolean; needsEmailConfirmation?: false }
+  | { user: null; isNew: true; needsEmailConfirmation: true };
 
 const cleanUsername = (s: string) => s.trim().normalize('NFKC').toLowerCase();
+const cleanEmail = (s: string) => s.trim().normalize('NFKC').toLowerCase();
 const usernameOK = (s: string) => /^[a-z0-9][a-z0-9_]{2,18}[a-z0-9]$/.test(s);
 
 export function validateName(name: string) {
@@ -34,107 +36,91 @@ export function validatePassword(password: string) {
   return password;
 }
 
-function bucket(name: string) {
-  return name.slice(0, 32);
+function mapAuthError(message: string): AppError {
+  const lower = message.toLowerCase();
+  if (lower.includes('username') && (lower.includes('duplicate') || lower.includes('unique') || lower.includes('already'))) return new AppError('err.usernameTaken');
+  if (lower.includes('already registered') || lower.includes('already exists')) return new AppError('err.emailTaken');
+  if (lower.includes('invalid login credentials')) return new AppError('err.signIn');
+  if (lower.includes('email not confirmed')) return new AppError('err.emailUnconfirmed');
+  return new AppError('err.backendUnavailable');
 }
 
-function checkRate(key: string) {
-  const g = db.get().guard[bucket(key)];
-  if (g && g.until > Date.now()) throw new AppError('err.rateLimit');
-}
-
-function failed(key: string) {
-  db.transaction((d) => {
-    const k = bucket(key);
-    const was = d.guard[k];
-    const n = Math.min(7, (was && was.until > Date.now() ? was.n : 0) + 1);
-    const delay = Math.min(30 * 60_000, 1_000 * 2 ** (n - 1));
-    d.guard[k] = { n, until: Date.now() + delay };
-  });
-}
-
-function succeeded(key: string) {
-  db.transaction((d) => {
-    delete d.guard[bucket(key)];
-  });
-}
-
-export async function register(input: { username: string; name: string; password: string; remember?: boolean }): Promise<AuthResult> {
+export async function register(input: { email: string; username: string; name: string; password: string }): Promise<AuthResult> {
+  const email = cleanEmail(input.email);
   const username = cleanUsername(input.username);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError('err.emailInvalid');
   if (!usernameOK(username)) throw new AppError('err.username');
   const name = validateName(input.name);
   validatePassword(input.password);
-  const pass = await hashPassword(input.password);
-  const key = `name:${username}`;
-  checkRate(key);
-  if (Object.values(db.get().users).some((u) => u.username.toLowerCase() === username)) throw new AppError('err.usernameTaken');
-  const user: User = {
-    id: `u_${uid(18)}`,
-    username,
-    name,
-    bio: '',
-    hue: Math.floor(Math.random() * 360),
-    presence: 'online',
-    statusText: '',
-    createdAt: Date.now(),
-    aura: null,
-    sparks: 300,
-    inventory: [],
-    frame: null,
-    theme: null,
-    stickerPack: null,
-    accent: null,
-    ring: false,
-    lastDaily: 0,
-    lastStipend: 0,
-    auth: pass,
-  };
-  db.transaction((d) => {
-    // Re-check inside the serialized local transaction to avoid duplicate usernames across tabs.
-    if (Object.values(d.users).some((u) => u.username.toLowerCase() === username)) throw new AppError('err.usernameTaken');
-    d.users[user.id] = user;
+
+  const client = requireSupabase();
+  const { data, error } = await client.auth.signUp({
+    email,
+    password: input.password,
+    options: { data: { username, display_name: name } },
   });
-  session.start(user.id, !!input.remember);
+  if (error) throw mapAuthError(error.message);
+  if (!data.user) throw new AppError('err.backendUnavailable');
+  if (!data.session) return { user: null, isNew: true, needsEmailConfirmation: true };
+
+  const user = await fetchProfile(data.user.id);
+  await syncRemoteWorkspace(data.user.id);
+  session.start(data.user.id, data.session.access_token, data.session.expires_at);
   return { user, isNew: true };
 }
 
-export async function signIn(input: { username: string; password: string; remember?: boolean }): Promise<AuthResult> {
-  const username = cleanUsername(input.username);
-  const key = `name:${username}`;
-  checkRate(key);
-  const person = Object.values(db.get().users).find((u) => u.username.toLowerCase() === username);
-  if (!person || !person.auth) {
-    failed(key);
-    throw new AppError('err.signIn');
-  }
-  const computed = await hashPassword(input.password.slice(0, 128), person.auth.salt, person.auth.iter);
-  if (!safeEqual(computed.hash, person.auth.hash)) {
-    failed(key);
-    throw new AppError('err.signIn');
-  }
-  succeeded(key);
-  db.transaction((d) => {
-    d.users[person.id].presence = 'online';
-  });
-  session.start(person.id, !!input.remember);
-  return { user: person, isNew: false };
+export async function signIn(input: { email: string; password: string }): Promise<AuthResult> {
+  const client = requireSupabase();
+  const email = cleanEmail(input.email);
+  const { data, error } = await client.auth.signInWithPassword({ email, password: input.password });
+  if (error) throw mapAuthError(error.message);
+  if (!data.user || !data.session) throw new AppError('err.signIn');
+
+  const user = await fetchProfile(data.user.id);
+  await syncRemoteWorkspace(data.user.id);
+  session.start(data.user.id, data.session.access_token, data.session.expires_at);
+  return { user, isNew: false };
 }
 
-export function signOut(): void {
+export async function restoreSession(): Promise<void> {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.getSession();
+  if (error) throw mapAuthError(error.message);
+  if (!data.session?.user) {
+    session.end();
+    return;
+  }
+  const user = await fetchProfile(data.session.user.id);
+  await syncRemoteWorkspace(user.id);
+  session.start(user.id, data.session.access_token, data.session.expires_at);
+}
+
+export async function signOut(): Promise<void> {
+  const client = requireSupabase();
   const userId = session.get()?.userId;
-  if (userId) db.transaction((d) => {
-    const person = d.users[userId];
-    if (person && !person.bot) person.presence = 'offline';
-  });
+  let presenceUpdateFailed = false;
+  if (userId) {
+    try {
+      await updateRemoteProfile(userId, { presence: 'offline' });
+    } catch {
+      presenceUpdateFailed = true;
+    }
+  }
+  const { error } = await client.auth.signOut();
+  if (error) throw mapAuthError(error.message);
   session.end();
+  if (presenceUpdateFailed) throw new AppError('err.backendUnavailable');
 }
 
-export function resetPasswordHelp(): void {
-  throw new AppError('auth.resetNotAvailable');
+export async function resetPassword(email: string): Promise<void> {
+  const client = requireSupabase();
+  const normalized = cleanEmail(email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new AppError('err.emailInvalid');
+  const { error } = await client.auth.resetPasswordForEmail(normalized, { redirectTo: window.location.origin });
+  if (error) throw mapAuthError(error.message);
 }
 
 export function getCurrentUser(): User | null {
   const id = session.get()?.userId;
-  if (!id) return null;
-  return db.get().users[id] ?? null;
+  return id ? db.get().users[id] ?? null : null;
 }

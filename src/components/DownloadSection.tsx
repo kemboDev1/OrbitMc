@@ -1,56 +1,68 @@
+import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
-import { detectDesktopTarget, downloadUrlFor, TARGET_LABEL, isMobile } from '../lib/downloads';
+import { detectDesktopTarget, fetchLatestRelease, releaseAssetFor, RELEASES_BASE, TARGET_LABEL, type DesktopTarget, type ReleaseAsset, isMobile } from '../lib/downloads';
 import { Icon } from './Icons';
+
+type ReleaseStatus = 'loading' | 'ready' | 'missing' | 'error';
+const platforms: Exclude<DesktopTarget, 'unknown'>[] = ['windows', 'macos', 'linux'];
 
 export function DownloadSection() {
   const { t } = useI18n();
   const target = detectDesktopTarget();
-  const url = downloadUrlFor(target);
   const mobile = isMobile();
+  const [assets, setAssets] = useState<ReleaseAsset[]>([]);
+  const [status, setStatus] = useState<ReleaseStatus>('loading');
 
-  const isDirectDownload = target !== 'unknown' && !mobile;
+  useEffect(() => {
+    let active = true;
+    void fetchLatestRelease().then((release) => {
+      if (!active) return;
+      setAssets(release ?? []);
+      setStatus(release ? 'ready' : 'missing');
+    }).catch(() => {
+      if (active) setStatus('error');
+    });
+    return () => { active = false; };
+  }, []);
 
-  const handleDownload = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    if (!isDirectDownload) {
-      // Let the link navigate to releases page
-      return;
-    }
-    // Track download intent if analytics are added later
-    console.log('[OrbitMc] Desktop download initiated for', target);
-  };
+  const currentAsset = releaseAssetFor(target, assets);
+  const note = mobile
+    ? t('downloadMobileNote')
+    : target === 'unknown'
+      ? t('downloadUnknownNote')
+      : status === 'loading'
+        ? t('releaseChecking')
+        : status === 'error'
+          ? t('releaseLookupFailed')
+          : status === 'missing'
+            ? t('releaseUnavailable')
+            : currentAsset
+              ? t('downloadReadyNote')
+              : t('downloadNoPlatformAsset');
+  const availablePlatforms = platforms.filter((platform) => releaseAssetFor(platform, assets));
 
   return (
     <section id="download" className="landing-install-section download-section" aria-labelledby="download-title">
       <div className="landing-install-copy download-copy">
-        <span className="landing-section-index">03 / {t('download')}</span>
         <h2 id="download-title">{t('downloadTitle')}</h2>
         <p>{t('downloadBody')}</p>
         <div className="download-actions">
-          {isDirectDownload ? (
-            <a
-              href={url}
-              className="landing-primary download-main"
-              download
-              onClick={handleDownload}
-            >
+          {currentAsset ? (
+            <a href={currentAsset.browser_download_url} className="landing-primary download-main">
               <Icon name="download" size={17} />
-              <span>
-                {t('downloadButton')} <strong>{TARGET_LABEL[target]}</strong>
-              </span>
+              <span>{t('downloadButton')} <strong>{TARGET_LABEL[target]}</strong></span>
             </a>
           ) : (
-            <a href={url} className="landing-primary download-main" target="_blank" rel="noopener">
-              <Icon name="github" size={17} />
-              <span>{t('viewReleases')}</span>
+            <a href="#install" className="landing-primary download-main">
+              <Icon name="download" size={17} />
+              <span>{t('landingDownload')}</span>
             </a>
           )}
-          <button className="landing-text-link" onClick={() => window.location.href = '#features'}>
-            {t('exploreFeatures')} <Icon name="arrowUpRight" size={16} />
-          </button>
+          <a className="landing-text-link" href={RELEASES_BASE} target="_blank" rel="noopener noreferrer">
+            {t('viewReleases')} <Icon name="arrowUpRight" size={16} />
+          </a>
         </div>
-        <p className="download-note" role="note">
-          {mobile ? t('downloadMobileNote') : target === 'unknown' ? t('downloadUnknownNote') : t('downloadReadyNote')}
-        </p>
+        <p className="download-note" role="status">{note}</p>
       </div>
 
       <aside className="landing-safety download-safety">
@@ -61,25 +73,22 @@ export function DownloadSection() {
         </div>
       </aside>
 
-      {target !== 'unknown' && !mobile && (
+      {status === 'ready' && availablePlatforms.length > 0 && (
         <details className="download-alternatives">
           <summary><Icon name="chevron" size={14} /> {t('otherPlatforms')}</summary>
           <ul className="download-alternatives-list">
-            {(['windows', 'macos', 'linux'] as const).map((p) => {
-              if (p === target) return null;
+            {availablePlatforms.filter((platform) => mobile || platform !== target).map((platform) => {
+              const asset = releaseAssetFor(platform, assets);
+              if (!asset) return null;
               return (
-                <li key={p}>
-                  <a
-                    href={downloadUrlFor(p)}
-                    download
-                    className="download-alt-link"
-                  >
+                <li key={platform}>
+                  <a href={asset.browser_download_url} className="download-alt-link">
                     <span className="download-alt-icon">
-                      {p === 'windows' && <Icon name="monitor" size={14} />}
-                      {p === 'macos' && <Icon name="apple" size={14} />}
-                      {p === 'linux' && <Icon name="terminal" size={14} />}
+                      {platform === 'windows' && <Icon name="monitor" size={14} />}
+                      {platform === 'macos' && <Icon name="apple" size={14} />}
+                      {platform === 'linux' && <Icon name="terminal" size={14} />}
                     </span>
-                    <span>{TARGET_LABEL[p]}</span>
+                    <span>{TARGET_LABEL[platform]}</span>
                     <Icon name="download" size={13} />
                   </a>
                 </li>

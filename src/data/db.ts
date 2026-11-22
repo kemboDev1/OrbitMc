@@ -20,7 +20,7 @@ function validDB(x: unknown): x is DB {
   for (const [id, raw] of Object.entries(d.users)) {
     if (!idKey(id) || !record(raw)) return false;
     const u = raw as Partial<User>;
-    if (u.id !== id || !text(u.username, 32) || !/^[a-z0-9._-]{1,32}$/i.test(u.username) || !text(u.name, LIMITS.name) || u.name.length < 2 || !text(u.bio, LIMITS.bio) || typeof u.hue !== 'number' || !Number.isFinite(u.hue) || u.hue < 0 || u.hue > 360 || !['online', 'idle', 'dnd', 'offline'].includes(u.presence ?? '') || !text(u.statusText, LIMITS.status) || typeof u.createdAt !== 'number' || !Number.isFinite(u.createdAt) || typeof u.bot !== 'undefined' && typeof u.bot !== 'boolean' || !image(u.avatar, LIMITS.imageCharsAura) || !Array.isArray(u.inventory) || u.inventory.length > 200 || !u.inventory.every((v) => text(v, 100)) || !(u.frame === null || text(u.frame, 100)) || !(u.theme === null || text(u.theme, 100)) || !(u.stickerPack === undefined || u.stickerPack === null || text(u.stickerPack, 100)) || typeof u.ring !== 'boolean' || typeof u.sparks !== 'number' || !Number.isFinite(u.sparks) || u.sparks < 0 || u.sparks > 99_999 || typeof u.lastDaily !== 'number' || !Number.isFinite(u.lastDaily) || typeof u.lastStipend !== 'number' || !Number.isFinite(u.lastStipend) || !(u.accent === null || u.accent === undefined || hex(u.accent))) return false;
+    if (u.id !== id || !text(u.username, 32) || !/^[a-z0-9._-]{1,32}$/i.test(u.username) || !text(u.name, LIMITS.name) || u.name.length < 2 || !text(u.bio, LIMITS.bio) || typeof u.hue !== 'number' || !Number.isFinite(u.hue) || u.hue < 0 || u.hue > 360 || !['online', 'idle', 'dnd', 'offline'].includes(u.presence ?? '') || !text(u.statusText, LIMITS.status) || typeof u.createdAt !== 'number' || !Number.isFinite(u.createdAt) || typeof u.bot !== 'undefined' && typeof u.bot !== 'boolean' || typeof u.serverBacked !== 'undefined' && typeof u.serverBacked !== 'boolean' || !image(u.avatar, LIMITS.imageCharsAura) || !Array.isArray(u.inventory) || u.inventory.length > 200 || !u.inventory.every((v) => text(v, 100)) || !(u.frame === null || text(u.frame, 100)) || !(u.theme === null || text(u.theme, 100)) || !(u.stickerPack === undefined || u.stickerPack === null || text(u.stickerPack, 100)) || typeof u.ring !== 'boolean' || typeof u.sparks !== 'number' || !Number.isFinite(u.sparks) || u.sparks < 0 || u.sparks > 99_999 || typeof u.lastDaily !== 'number' || !Number.isFinite(u.lastDaily) || typeof u.lastStipend !== 'number' || !Number.isFinite(u.lastStipend) || !(u.accent === null || u.accent === undefined || hex(u.accent))) return false;
     if (u.auth !== undefined && (!record(u.auth) || typeof u.auth.salt !== 'string' || typeof u.auth.hash !== 'string' || u.auth.iter !== LIMITS.pbkdf2 || !/^[A-Za-z0-9+/]{20,28}={0,2}$/.test(u.auth.salt) || !/^[A-Za-z0-9+/]{40,48}={0,2}$/.test(u.auth.hash))) return false;
     if (u.aura !== null && u.aura !== undefined) {
       if (!record(u.aura) || !['ember', 'flare', 'nova'].includes(u.aura.tier as string) || !['month', 'year'].includes(u.aura.cycle as string) || typeof u.aura.since !== 'number' || !Number.isFinite(u.aura.since) || typeof u.aura.renews !== 'number' || !Number.isFinite(u.aura.renews)) return false;
@@ -59,10 +59,68 @@ function validDB(x: unknown): x is DB {
 }
 
 /**
- * A local-first prototype. All data belongs to this browser profile.
- * This is intentionally not called secure, synced, or multi-user storage.
+ * The local store is a cache for the authenticated account and UI preferences.
  */
 export const dbStore = createStore<DB>(makeSeed(), 'sado:db', validDB);
+
+function removeBuiltInProfiles(data: DB): boolean {
+  const botIds = new Set(Object.values(data.users).filter((user) => user.bot).map((user) => user.id));
+  if (!botIds.size) return false;
+
+  const removedHubs = new Set(
+    Object.values(data.hubs)
+      .filter((hub) => botIds.has(hub.ownerId) || Object.keys(hub.members).some((id) => botIds.has(id)))
+      .map((hub) => hub.id),
+  );
+  const removedRooms = new Set(Object.values(data.hubs).filter((hub) => removedHubs.has(hub.id)).flatMap((hub) => hub.rooms.map((room) => room.id)));
+
+  for (const id of botIds) delete data.users[id];
+  for (const id of removedHubs) delete data.hubs[id];
+
+  for (const [channel, messages] of Object.entries(data.msgs)) {
+    const parts = channel.split(':');
+    const referencesBot = channel.startsWith('dm:') && parts.some((id) => botIds.has(id));
+    if (removedRooms.has(channel) || referencesBot) {
+      delete data.msgs[channel];
+      continue;
+    }
+    data.msgs[channel] = messages
+      .filter((message) => !botIds.has(message.by))
+      .map((message) => {
+        for (const [emoji, ids] of Object.entries(message.reactions)) {
+          message.reactions[emoji] = ids.filter((id) => !botIds.has(id));
+          if (!message.reactions[emoji].length) delete message.reactions[emoji];
+        }
+        return message;
+      });
+  }
+
+  const removedListings = new Set(
+    Object.values(data.listings).filter((listing) => botIds.has(listing.sellerId)).map((listing) => listing.id),
+  );
+  for (const id of removedListings) delete data.listings[id];
+  for (const user of Object.values(data.users)) {
+    user.inventory = user.inventory.filter((id) => !removedListings.has(id));
+    if (user.frame && removedListings.has(user.frame)) user.frame = null;
+    if (user.theme && removedListings.has(user.theme)) user.theme = null;
+    if (user.stickerPack && removedListings.has(user.stickerPack)) user.stickerPack = null;
+    if (data.dms[user.id]) data.dms[user.id] = data.dms[user.id].filter((channel) => !!data.msgs[channel] || !channel.startsWith('dm:'));
+    if (data.reads[user.id]) {
+      for (const channel of Object.keys(data.reads[user.id])) {
+        if (!data.msgs[channel] && !Object.values(data.hubs).some((hub) => hub.rooms.some((room) => room.id === channel))) {
+          delete data.reads[user.id][channel];
+        }
+      }
+    }
+  }
+  for (const id of botIds) {
+    delete data.dms[id];
+    delete data.reads[id];
+  }
+  return true;
+}
+
+if (removeBuiltInProfiles(dbStore.get())) dbStore.set(dbStore.get());
 
 export const db = {
   use: dbStore.use,

@@ -1,62 +1,79 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { register, signIn } from '../src/data/auth';
+import { register, validateBio, validateName, validatePassword } from '../src/data/auth';
 import { sendMessage, addReaction, editMessage, pinMessage, deleteMessage, startDM } from '../src/data/chat';
 import { db } from '../src/data/db';
 import { AppError } from '../src/data/errors';
 import { addRoom, joinInvite, leaveHub, makeHub } from '../src/data/hubs';
 import { buyListing, cancelAura, claimDaily, createListing, equipListing, giftListing, hasAura, subscribeAura } from '../src/data/market';
+import type { User } from '../src/data/types';
+import { releaseAssetFor, type ReleaseAsset } from '../src/lib/downloads';
 
 const isError = (key: string) => (error: unknown) => error instanceof AppError && error.key === key;
 
-test('account, chat, rooms, bazaar and backup work together', async () => {
-  const { user } = await register({ username: 'test_user', name: 'Test User', password: 'StrongPass123!' });
-  assert.equal(user.username, 'test_user');
-  assert.equal((await signIn({ username: 'test_user', password: 'StrongPass123!' })).user.id, user.id);
-  await assert.rejects(() => signIn({ username: 'test_user', password: 'WrongPass123!' }), isError('err.signIn'));
-  await assert.rejects(() => register({ username: 'x', name: 'X', password: 'short' }), isError('err.username'));
+function addUser(id: string, username: string): User {
+  const user: User = {
+    id, username, name: username, bio: '', hue: 210, presence: 'offline', statusText: '',
+    createdAt: Date.now(), aura: null, sparks: 300, inventory: [], frame: null, theme: null,
+    accent: null, ring: false, lastDaily: 0, lastStipend: 0,
+  };
+  db.transaction((data) => { data.users[id] = user; });
+  return user;
+}
 
-  const dm = startDM(user.id, 'u_mila');
-  const message = sendMessage({ channel: dm, userId: user.id, text: 'Hello, little corner.', reply: undefined });
-  editMessage(dm, message.id, user.id, 'A revised hello.');
-  addReaction(dm, message.id, 'u_mila', '✨');
-  pinMessage(dm, message.id, user.id);
+test('local profile previews, chats, rooms, bazaar and backups keep working', async () => {
+  db.wipe();
+  const user = addUser('user_test', 'test_user');
+  const other = addUser('user_other', 'other_user');
+  const recipient = addUser('user_gift', 'gift_user');
+
+  assert.equal(validateName('  Test   User '), 'Test User');
+  assert.equal(validateBio(' hello '), 'hello');
+  assert.equal(validatePassword('StrongPass123!'), 'StrongPass123!');
+  await assert.rejects(() => register({ email: 'bad', username: 'test_user', name: 'Test User', password: 'StrongPass123!' }), isError('err.emailInvalid'));
+  await assert.rejects(() => register({ email: 'test@example.com', username: 'x', name: 'Test User', password: 'StrongPass123!' }), isError('err.username'));
+
+  const dm = startDM(user.id, user.id);
+  const message = await sendMessage({ channel: dm, userId: user.id, text: 'Hello, little corner.' });
+  await editMessage(dm, message.id, user.id, 'A revised hello.');
+  await addReaction(dm, message.id, user.id, '✨');
+  await pinMessage(dm, message.id, user.id);
   assert.equal(db.get().msgs[dm][0].text, 'A revised hello.');
   assert.equal(db.get().msgs[dm][0].pinned, true);
-  assert.deepEqual(db.get().msgs[dm][0].reactions['✨'], ['u_mila']);
+  assert.deepEqual(db.get().msgs[dm][0].reactions['✨'], [user.id]);
   assert.throws(() => sendMessage({ channel: dm, userId: user.id, text: ' '.repeat(3) }), isError('err.emptyMessage'));
-  deleteMessage(dm, message.id, user.id);
+  await deleteMessage(dm, message.id, user.id);
   assert.equal(db.get().msgs[dm].length, 0);
 
   const hub = makeHub({ userId: user.id, name: 'Test corner', about: 'A private place', emoji: '✳', public: false });
-  assert.equal(joinInvite(hub.invite, 'u_mila')?.id, hub.id);
+  assert.equal(joinInvite(hub.invite, other.id)?.id, hub.id);
   const room = addRoom(hub.id, user.id, 'behind-the-scenes');
   assert.ok(db.get().hubs[hub.id].rooms.some((item) => item.id === room));
-  leaveHub(hub.id, 'u_mila');
-  assert.equal(db.get().hubs[hub.id].members.u_mila, undefined);
+  leaveHub(hub.id, other.id);
+  assert.equal(db.get().hubs[hub.id].members[other.id], undefined);
 
   const set = createListing({ userId: user.id, kind: 'stickers', name: 'My set', about: 'Made for you', price: 25, stickers: ['🫶', '✨', '🥹', '🌙', '🌱', '🤍'] });
   assert.equal(claimDaily(user.id), 25);
   assert.throws(() => claimDaily(user.id), isError('dailyDone'));
-  db.transaction((data) => { data.users.u_mila.sparks = 100; });
+  db.transaction((data) => { data.users[other.id].sparks = 100; });
   const sellerBeforeSale = db.get().users[user.id].sparks;
-  buyListing('u_mila', set.id);
-  assert.ok(db.get().users.u_mila.inventory.includes(set.id));
+  buyListing(other.id, set.id);
+  assert.ok(db.get().users[other.id].inventory.includes(set.id));
   assert.equal(db.get().users[user.id].sparks, sellerBeforeSale + 21, 'free seller receives the sale after the 15% bazaar fee');
-  equipListing('u_mila', set.id);
-  assert.throws(() => buyListing('u_mila', set.id), isError('alreadyOwned'));
+  equipListing(other.id, set.id);
+  assert.throws(() => buyListing(other.id, set.id), isError('alreadyOwned'));
 
   db.transaction((data) => { data.users[user.id].inventory.push(set.id); data.users[user.id].sparks = 100; });
-  giftListing(user.id, 'u_leo', set.id);
-  assert.ok(db.get().users.u_leo.inventory.includes(set.id), 'an item the sender owns can be gifted');
+  giftListing(user.id, recipient.id, set.id);
+  assert.ok(db.get().users[recipient.id].inventory.includes(set.id), 'an item the sender owns can be gifted');
   assert.equal(db.get().users[user.id].sparks, 75);
 
   subscribeAura(user.id, 'flare', 'month');
   assert.equal(hasAura(user.id), true);
   const sellerBeforeAuraSale = db.get().users[user.id].sparks;
   const auraSale = createListing({ userId: user.id, kind: 'stickers', name: 'Orbit set', about: 'Made for you', price: 25, stickers: ['🫶', '✨', '🥹', '🌙', '🌱', '🤍'] });
-  db.transaction((data) => { data.users.u_mila.sparks = 100; });
-  buyListing('u_mila', auraSale.id);
+  db.transaction((data) => { data.users[other.id].sparks = 100; });
+  buyListing(other.id, auraSale.id);
   assert.equal(db.get().users[user.id].sparks, sellerBeforeAuraSale + 23, 'Flare sellers pay the configured 5% fee');
   db.transaction((data) => { data.users[user.id].lastDaily = 0; });
   assert.equal(claimDaily(user.id), 500, 'Flare daily reward uses the configured stipend');
@@ -64,8 +81,20 @@ test('account, chat, rooms, bazaar and backup work together', async () => {
   assert.equal(hasAura(user.id), true, 'cancelling renewal keeps benefits until expiry');
 
   const backup = JSON.parse(db.exportJSON(user)) as { data: { users: Record<string, { auth?: { hash: string }; password?: string }> } };
-  assert.ok(backup.data.users[user.id].auth?.hash);
   assert.equal(backup.data.users[user.id].password, undefined, 'plain passwords are never exported');
   db.importJSON(JSON.stringify(backup));
-  assert.equal((await signIn({ username: 'test_user', password: 'StrongPass123!' })).user.id, user.id);
+  assert.ok(db.get().users[user.id]);
+});
+
+test('release lookup only selects the installer matching the detected platform', () => {
+  const assets: ReleaseAsset[] = [
+    { name: 'OrbitMc-Windows-1.2.3.exe', browser_download_url: 'https://example.invalid/windows.exe' },
+    { name: 'OrbitMc-1.2.3.dmg', browser_download_url: 'https://example.invalid/macos.dmg' },
+    { name: 'OrbitMc-1.2.3.AppImage', browser_download_url: 'https://example.invalid/linux.AppImage' },
+    { name: 'OrbitMc-Windows-1.2.3.zip', browser_download_url: 'https://example.invalid/other.zip' },
+  ];
+  assert.equal(releaseAssetFor('windows', assets)?.name, 'OrbitMc-Windows-1.2.3.exe');
+  assert.equal(releaseAssetFor('macos', assets)?.name, 'OrbitMc-1.2.3.dmg');
+  assert.equal(releaseAssetFor('linux', assets)?.name, 'OrbitMc-1.2.3.AppImage');
+  assert.equal(releaseAssetFor('unknown', assets), undefined);
 });

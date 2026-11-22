@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { DB, Listing, ListingKind, User } from '../data/types';
-import { buyListing, claimDaily, createListing, equipListing, giftListing, getAura, hasAura, removeListing } from '../data/market';
+import { buyListing, claimDaily, createListing, equipListing, getAura, hasAura, removeListing } from '../data/market';
 import { useI18n } from '../i18n';
 import { fmtMoney } from '../lib/util';
 import { AppError } from '../data/errors';
@@ -27,7 +27,6 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
   const [sort, setSort] = useState<'featured' | 'latest' | 'popular' | 'low' | 'high'>('featured');
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
-  const [gift, setGift] = useState<Listing | null>(null);
 
   useEffect(() => {
     const openCreator = () => setCreatorOpen(true);
@@ -64,6 +63,7 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
       <div className="market-copy"><div className="eyebrow">{t('marketEyebrow')}</div><h1>{t('marketTitle')}</h1><p>{t('marketSub')}</p></div>
       <div className="market-wallet"><div className="spark-wallet"><Icon name="spark" size={17}/><span><b>{user.sparks.toLocaleString(lang)}</b><small>{t('yourSparks')}</small></span></div><button className="btn btn-outline btn-small" onClick={daily} disabled={new Date(user.lastDaily).toDateString() === new Date().toDateString()}>{new Date(user.lastDaily).toDateString() === new Date().toDateString() ? t('dailyDone') : t('dailyClaim', { count: aura ? { ember: 200, flare: 500, nova: 1200 }[aura.tier] : 25 })}</button></div>
     </div>
+    <p className="local-feature-note">{t('marketLocalNotice')}</p>
     <div className="market-tools"><div className="market-tabs">{(['all', 'stickers', 'themes', 'frames', 'owned', 'made'] as Kind[]).map((k) => <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>{k === 'all' ? t('allItems') : k === 'owned' ? t('bag') : k === 'made' ? t('yourShop') : t(k)}</button>)}</div><div className="market-filters"><label className="market-search"><Icon name="search" size={16}/><input placeholder={t('searchMarket')} value={query} onChange={(e) => setQuery(e.target.value)}/></label><select className="sort-select" aria-label={t('filters')} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}><option value="featured">{t('featured')}</option><option value="latest">{t('latest')}</option><option value="popular">{t('popular')}</option><option value="low">{t('priceLow')}</option><option value="high">{t('priceHigh')}</option></select><button className="icon-btn bag-button" title={t('bag')} aria-label={t('bag')} onClick={() => setBagOpen(true)}><Icon name="grid" size={17}/>{owned.length > 0 && <span className="bag-count">{owned.length}</span>}</button></div></div>
     {kind === 'all' && !query && <div className="market-banner"><div className="market-banner-copy"><span className="banner-kicker">{t('marketBannerKicker')}</span><h2>{t('marketBannerTitle')}</h2><p>{t('marketBannerText')}</p><button className="btn btn-light" onClick={() => setKind('stickers')}>{t('stickers')}<Icon name="arrowUpRight" size={15}/></button></div><div className="banner-sticker sticker-large">🪩</div><div className="banner-sticker sticker-small">🫶</div><div className="banner-planet"/><div className="banner-outline"/></div>}
     <div className="market-section-title"><h2>{kind === 'owned' ? t('bag') : kind === 'made' ? t('yourShop') : sort === 'featured' ? t('featured') : t(sort === 'latest' ? 'latest' : sort === 'popular' ? 'popular' : 'allItems')}</h2><span>{filtered.length.toLocaleString(lang)} {t('allItems').toLowerCase()}</span></div>
@@ -77,13 +77,12 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
           {l.auraOnly && <span className="product-aura-tag"><Icon name="spark" size={11}/> ORBIT</span>}
           {isOwned && <span className="product-owned"><Icon name={isInUse ? 'check' : 'spark'} size={12}/>{isInUse ? t('equipped') : t('bag')}</span>}
         </button>
-        <div className="product-meta"><div className="product-title-line"><h3 title={l.name}>{l.name}</h3><span className="product-price"><Icon name="spark" size={13}/>{l.price}</span></div><p>{l.about}</p><div className="product-foot"><span className="seller"><Avatar user={seller} size="xs"/>{seller?.name ?? t('you')}</span><span className="product-sales">{l.sales.toLocaleString(lang)} <Icon name="heart" size={12}/></span></div><div className="product-actions">{isOwned ? <button className={`btn ${isInUse ? 'btn-secondary' : 'btn-outline'} btn-small`} onClick={() => useItem(l)}>{isInUse ? t('equipped') : t('equip')}</button> : <button className="btn btn-primary btn-small" onClick={() => buy(l)}><Icon name="spark" size={14}/>{l.price} {t('sparks')}</button>} {isOwned && <button className="btn btn-ghost btn-small" onClick={() => setGift(l)}>{t('gift')}</button>}{l.sellerId === user.id && <button className="icon-btn danger-ghost" title={t('removeListing')} aria-label={t('removeListing')} onClick={() => remove(l)}><Icon name="trash" size={14}/></button>}</div></div>
+        <div className="product-meta"><div className="product-title-line"><h3 title={l.name}>{l.name}</h3><span className="product-price"><Icon name="spark" size={13}/>{l.price}</span></div><p>{l.about}</p><div className="product-foot"><span className="seller"><Avatar user={seller} size="xs"/>{seller?.name ?? t('you')}</span><span className="product-sales">{l.sales.toLocaleString(lang)} <Icon name="heart" size={12}/></span></div><div className="product-actions">{isOwned ? <button className={`btn ${isInUse ? 'btn-secondary' : 'btn-outline'} btn-small`} onClick={() => useItem(l)}>{isInUse ? t('equipped') : t('equip')}</button> : <button className="btn btn-primary btn-small" onClick={() => buy(l)}><Icon name="spark" size={14}/>{l.price} {t('sparks')}</button>}{l.sellerId === user.id && <button className="icon-btn danger-ghost" title={t('removeListing')} aria-label={t('removeListing')} onClick={() => remove(l)}><Icon name="trash" size={14}/></button>}</div></div>
       </article>;
     })}</div> : <div className="inline-empty market-empty"><div className="empty-mark">✳</div><p>{kind === 'owned' ? t('bagEmpty') : t('noResults')}</p>{kind === 'made' && <button className="btn btn-secondary btn-small" onClick={() => setCreatorOpen(true)}>{t('makeListing')}</button>}</div>}
     <div className="market-maker-callout"><div><span className="eyebrow">{t('makerTitle')}</span><h2>{t('creator')}</h2><p>{t('marketSub')}</p></div><button className="btn btn-primary" onClick={() => setCreatorOpen(true)}><Icon name="plus" size={16}/>{t('makeListing')}</button></div>
     <CreatorModal open={creatorOpen} onClose={() => setCreatorOpen(false)} user={user}/>
-    <BagModal open={bagOpen} onClose={() => setBagOpen(false)} items={owned} user={user} onUse={useItem} onGift={setGift}/>
-    <GiftModal listing={gift} onClose={() => setGift(null)} db={db} user={user}/>
+    <BagModal open={bagOpen} onClose={() => setBagOpen(false)} items={owned} user={user} onUse={useItem}/>
   </div>;
 }
 
@@ -119,19 +118,7 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
   </form></Modal>;
 }
 
-function BagModal({ open, onClose, items, user, onUse, onGift }: { open: boolean; onClose: () => void; items: Listing[]; user: User; onUse: (l: Listing) => void; onGift: (l: Listing) => void }) {
+function BagModal({ open, onClose, items, user, onUse }: { open: boolean; onClose: () => void; items: Listing[]; user: User; onUse: (l: Listing) => void }) {
   const { t } = useI18n();
-  return <Modal open={open} onClose={onClose} title={t('bag')} subtitle={`${items.length} · ${t('yourSparks')}: ${user.sparks}`} size="md">{items.length ? <div className="bag-list">{items.map((l) => { const equipped = user.frame === l.id || user.theme === l.id; return <div className="bag-row" key={l.id}><span className={`bag-thumb thumb-${l.kind}`} style={{ '--product-hue': l.theme?.accent ?? l.frame?.colors[0] ?? '#ffb987' } as React.CSSProperties}>{l.kind === 'stickers' ? l.stickers?.[0] : l.kind === 'theme' ? '◐' : '◎'}</span><div className="bag-copy"><b>{l.name}</b><small>{t(l.kind)}</small></div><button className={`btn btn-small ${equipped ? 'btn-secondary' : 'btn-outline'}`} onClick={() => onUse(l)}>{equipped ? t('equipped') : t('equip')}</button><button className="icon-btn" aria-label={t('gift')} title={t('gift')} onClick={() => onGift(l)}><Icon name="arrowUpRight" size={15}/></button></div>; })}</div> : <div className="inline-empty"><div className="empty-mark">✳</div><p>{t('bagEmpty')}</p></div>}</Modal>;
-}
-
-function GiftModal({ listing, onClose, db, user }: { listing: Listing | null; onClose: () => void; db: DB; user: User }) {
-  const { t } = useI18n();
-  const [query, setQuery] = useState('');
-  const candidates = Object.values(db.users).filter((p) => p.id !== user.id && p.bot && !p.inventory.includes(listing?.id ?? '') && `${p.name} ${p.username}`.toLowerCase().includes(query.toLowerCase()));
-  const deliver = (id: string) => {
-    if (!listing) return;
-    try { giftListing(user.id, id, listing.id); tell(t('bought'), 'good'); onClose(); }
-    catch (e) { tell(e instanceof AppError ? t(e.key) : t('err.generic'), 'bad'); }
-  };
-  return <Modal open={!!listing} onClose={onClose} title={t('gift')} subtitle={t('giftHint')} size="sm">{listing && <div className="gift-modal-content"><div className="gift-preview"><span>{listing.kind === 'stickers' ? listing.stickers?.[0] : listing.kind === 'theme' ? '◐' : '◎'}</span><b>{listing.name}</b><small>{listing.price} ✳</small></div><label className="mini-search"><Icon name="search" size={15}/><input placeholder={t('search')} value={query} onChange={(e) => setQuery(e.target.value)}/></label>{candidates.map((p) => <button className="gift-recipient" key={p.id} onClick={() => deliver(p.id)}><Avatar user={p} size="sm" showStatus/><span>{p.name}</span><Icon name="arrowUpRight" size={15}/></button>)}</div>}</Modal>;
+  return <Modal open={open} onClose={onClose} title={t('bag')} subtitle={`${items.length} · ${t('yourSparks')}: ${user.sparks}`} size="md">{items.length ? <div className="bag-list">{items.map((l) => { const equipped = user.frame === l.id || user.theme === l.id; return <div className="bag-row" key={l.id}><span className={`bag-thumb thumb-${l.kind}`} style={{ '--product-hue': l.theme?.accent ?? l.frame?.colors[0] ?? '#ffb987' } as React.CSSProperties}>{l.kind === 'stickers' ? l.stickers?.[0] : l.kind === 'theme' ? '◐' : '◎'}</span><div className="bag-copy"><b>{l.name}</b><small>{t(l.kind)}</small></div><button className={`btn btn-small ${equipped ? 'btn-secondary' : 'btn-outline'}`} onClick={() => onUse(l)}>{equipped ? t('equipped') : t('equip')}</button></div>; })}</div> : <div className="inline-empty"><div className="empty-mark">✳</div><p>{t('bagEmpty')}</p></div>}</Modal>;
 }

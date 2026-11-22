@@ -23,6 +23,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
         <div className="landing-language" aria-label={t('landingLanguage')}>
           <button className={lang === 'en' ? 'selected' : ''} onClick={() => language.set('en')}>EN</button>
           <button className={lang === 'ru' ? 'selected' : ''} onClick={() => language.set('ru')}>RU</button>
+          <button className={lang === 'uz' ? 'selected' : ''} onClick={() => language.set('uz')}>UZ</button>
         </div>
         <button className="landing-icon-button" aria-label={t('landingThemeToggle')} title={t('landingThemeToggle')} onClick={() => themeMode.set(theme === 'dark' ? 'light' : 'dark')}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17}/></button>
         <button className="landing-signin" onClick={onEnter}>{t('signIn')}</button>

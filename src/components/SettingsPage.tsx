@@ -35,9 +35,9 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
   const [accent, setAccent] = useState(user.accent ?? '');
 
   const used = useMemo(() => db.bytes(), [user, db.use]);
-  const save = (e: FormEvent) => {
+  const save = async (e: FormEvent) => {
     e.preventDefault(); setSaveBusy(true);
-    try { updateProfile(user.id, { name, bio, avatar: avatar || null }); tell(t('profileSaved'), 'good'); }
+    try { await updateProfile(user.id, { name, bio, avatar: avatar || null }); tell(t('profileSaved'), 'good'); }
     catch (e) { tell(e instanceof AppError ? t(e.key) : t('err.saveFailed'), 'bad'); }
     finally { setSaveBusy(false); }
   };
@@ -61,15 +61,21 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
     if (!file) return;
     try {
       if (file.size > 6 * 1024 * 1024) throw new Error('size');
-      db.importJSON(await file.text());
-      // Imported auth is intentionally discarded. Sign out to avoid a session referencing an old profile.
+      const backup = await file.text();
+      await signOut();
+      db.importJSON(backup);
       session.end();
       tell(t('importDone'), 'good');
       onSignedOut();
     } catch { tell(t('backupError'), 'bad'); }
   };
-  const wipe = () => {
-    signOut(); db.wipe(); setResetOpen(false); tell(t('wipeDone'), 'good'); onSignedOut();
+  const wipe = async () => {
+    try {
+      await signOut();
+      db.wipe(); setResetOpen(false); tell(t('wipeDone'), 'good'); onSignedOut();
+    } catch (e) {
+      tell(e instanceof AppError ? t(e.key) : t('err.generic'), 'bad');
+    }
   };
   const setA = (value: string) => {
     setAccent(value);
@@ -107,7 +113,7 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
         <section className="settings-section" id="appearance"><div className="settings-section-head"><span className="section-index">02</span><div><h2>{t('appearance')}</h2><p>{t('appearanceHint')}</p></div></div>
           <div className="setting-row"><div><b>{t('theme')}</b><p>{t('themeSystem')}</p></div><div className="theme-choice">{(['system', 'dark', 'light'] as const).map((theme) => <button key={theme} className={`theme-option ${currentTheme === theme ? 'selected' : ''}`} onClick={() => themeMode.set(theme)}><span className={`theme-swatch swatch-${theme}`}><i/><i/></span><small>{t(theme === 'system' ? 'system' : theme === 'dark' ? 'dark' : 'light')}</small></button>)}</div></div>
           <div className="setting-row"><div><b>{t('accent')}</b><p>{t('accentDefault')}</p></div><div className="color-swatches"><button className={`color-dot sado-dot ${!accent ? 'selected' : ''}`} title={t('accentDefault')} onClick={() => setA('')}/>{ACCENTS.slice(1).map((c) => <button key={c} className={`color-dot ${accent === c ? 'selected' : ''}`} title={c} style={{ '--swatch': c } as React.CSSProperties} onClick={() => setA(c)}/>)}</div></div>
-          <div className="setting-row"><div><b>{t('language')}</b><p>{t('english')} · {t('russian')}</p></div><div className="segmented-choice lang-setting"><button className={lang === 'en' ? 'selected' : ''} onClick={() => language.set('en')}>EN</button><button className={lang === 'ru' ? 'selected' : ''} onClick={() => language.set('ru')}>RU</button></div></div>
+          <div className="setting-row"><div><b>{t('language')}</b><p>{t('english')} · {t('russian')} · {t('uzbek')}</p></div><div className="segmented-choice lang-setting"><button className={lang === 'en' ? 'selected' : ''} onClick={() => language.set('en')}>EN</button><button className={lang === 'ru' ? 'selected' : ''} onClick={() => language.set('ru')}>RU</button><button className={lang === 'uz' ? 'selected' : ''} onClick={() => language.set('uz')}>UZ</button></div></div>
           <div className="setting-row"><div><b>{t('layout')}</b><p>{t('messageHint')}</p></div><select className="sort-select" value={pr.layout} onChange={(e) => prefs.set({ layout: e.target.value as typeof pr.layout })}><option value="auto">{t('autoLayout')}</option><option value="bubbles">{t('bubbles')}</option><option value="stream">{t('stream')}</option></select></div>
           <div className="setting-row"><div><b>{t('preferences')}</b><p>{t('cozy')} · {t('compact')}</p></div><div className="segmented-choice"><button className={pr.density === 'cozy' ? 'selected' : ''} onClick={() => prefs.set({ density: 'cozy' })}>{t('cozy')}</button><button className={pr.density === 'compact' ? 'selected' : ''} onClick={() => prefs.set({ density: 'compact' })}>{t('compact')}</button></div></div>
         </section>
@@ -125,7 +131,7 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
 
         <section className="settings-section install-section" id="install"><div className="settings-section-head"><span className="section-index">06</span><div><h2>{t('install')}</h2><p>{t('installSub')}</p></div></div><div className="install-card"><div className="install-logo"><span>S</span></div><div className="install-copy"><b>{isStandalone() ? t('installReady') : t('brand')}</b><p>{t('downloadApp')}</p><small>{t('installSub')}</small></div><button className="btn btn-primary btn-small" onClick={openInstall} disabled={isStandalone()}>{isStandalone() ? t('installReady') : t(promptAvailable ? 'installAction' : 'install')}</button></div></section>
 
-        <div className="signout-line"><span>@{user.username}</span><button className="btn btn-ghost" onClick={() => { signOut(); onSignedOut(); }}><Icon name="back" size={15}/>{t('signOut')}</button></div>
+        <div className="signout-line"><span>@{user.username}</span><button className="btn btn-ghost" onClick={async () => { try { await signOut(); onSignedOut(); } catch (e) { tell(e instanceof AppError ? t(e.key) : t('err.generic'), 'bad'); } }}><Icon name="back" size={15}/>{t('signOut')}</button></div>
       </div>
     </div>
     <Modal open={resetOpen} onClose={() => setResetOpen(false)} title={t('resetConfirm')} subtitle={t('resetSub')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setResetOpen(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={wipe}>{t('wipeData')}</button></div></Modal>

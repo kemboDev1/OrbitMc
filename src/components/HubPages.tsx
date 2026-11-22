@@ -20,6 +20,7 @@ export function HubPage({ db, user, onOpen, onCreate }: { db: DB; user: User; on
   const join = (h: Hub) => { try { joinHub(h.id, user.id); tell(t('hubJoined'), 'good'); } catch { tell(t('err.generic'), 'bad'); } };
   return <div className="page-content hub-page">
     <div className="page-heading"><div><div className="eyebrow">{t('hubTitleTag')}</div><h1>{t('hubs')}</h1><p>{t('discoverHubs')}</p></div><button className="btn btn-primary" onClick={onCreate}><Icon name="plus" size={16}/>{t('createHub')}</button></div>
+    <p className="local-feature-note">{t('hubsLocalNotice')}</p>
     <div className="hub-section-head"><h2>{t('yourHubs')} <span className="count-pill">{joined.length}</span></h2>{joined.length === 0 && <button className="btn btn-secondary btn-small" onClick={onCreate}>{t('makeHubFirst')}</button>}</div>
     {joined.length > 0 ? <div className="hub-grid">{joined.map((h) => {
       const members = Object.keys(h.members).map((id) => db.users[id]).filter(Boolean);
@@ -59,9 +60,7 @@ export function CreateHubModal({ open, onClose, user, onCreated }: { open: boole
 export function PeoplePage({ db, user, onChat }: { db: DB; user: User; onChat: (id: string) => void }) {
   const { t, lang } = useI18n();
   const [q, setQ] = useState('');
-  const list = useMemo(() => Object.values(db.users).filter((p) => p.id !== user.id && !p.bot && `${p.name} ${p.username}`.toLowerCase().includes(q.toLowerCase())), [db.users, user.id, q]);
-  const botList = useMemo(() => Object.values(db.users).filter((p) => p.bot && `${p.name} ${p.username}`.toLowerCase().includes(q.toLowerCase())), [db.users, q]);
-  const others = [...list, ...botList];
+  const others = useMemo(() => Object.values(db.users).filter((p) => p.serverBacked && p.id !== user.id && `${p.name} ${p.username}`.toLowerCase().includes(q.toLowerCase())), [db.users, user.id, q]);
   return <div className="page-content people-page">
     <div className="page-heading"><div><div className="eyebrow">THE GOOD PEOPLE</div><h1>{t('people')}</h1><p>{t('welcomeSub')}</p></div><label className="page-search"><Icon name="search" size={17}/><input placeholder={t('search')} value={q} onChange={(e) => setQ(e.target.value)}/></label></div>
     {others.length ? <div className="people-list">{others.map((p) => <button key={p.id} className="person-card" onClick={() => onChat(p.id)}><Avatar user={p} size="lg" showStatus/><div className="person-card-info"><h3>{p.name}{p.aura && <span className="aura-inline"><Icon name="spark" size={10}/> ORBIT</span>}</h3><small>@{p.username}</small><p>{p.statusText || p.bio || t('welcomeSub')}</p></div><span className="person-presence"><i className={`status-mini status-${p.presence}`}/>{t(p.presence)}</span><Icon name="chevron" size={16}/></button>)}</div> : <div className="inline-empty"><div className="empty-mark">◎</div><p>{t('noPeople')}</p></div>}

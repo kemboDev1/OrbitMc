@@ -1,4 +1,4 @@
-name: Build Sado Desktop
+name: Build OrbitMc Desktop
 
 on:
   push:
@@ -27,5 +27,5 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: sado-desktop-build
+          name: orbitmc-desktop-build
           path: release/

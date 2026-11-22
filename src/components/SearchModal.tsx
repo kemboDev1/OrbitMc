@@ -42,7 +42,7 @@ export function SearchModal({ db, user, onSelect }: { db: DB; user: User; onSele
       if (!allowed) return [];
       return rows.filter((m) => `${m.text} ${m.sticker ?? ''}`.toLowerCase().includes(q)).map((m) => ({ kind: 'message' as const, channel: ch, message: m, person: db.users[m.by] }));
     }).sort((a, b) => b.message.ts - a.message.ts).slice(0, 12);
-    const people = Object.values(db.users).filter((p) => p.id !== user.id && `${p.name} ${p.username}`.toLowerCase().includes(q)).slice(0, 5).map((person) => ({ kind: 'person' as const, person }));
+    const people = Object.values(db.users).filter((p) => p.serverBacked && p.id !== user.id && `${p.name} ${p.username}`.toLowerCase().includes(q)).slice(0, 5).map((person) => ({ kind: 'person' as const, person }));
     return [...people, ...messages];
   }, [db, q, scope, user.id]);
 

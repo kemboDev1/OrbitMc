@@ -16,7 +16,7 @@ export function LandingHero() {
           <a className="landing-secondary" href="#install">{t('landingInstallNav')}</a>
         </div>
         <div className="landing-proof">
-          <span className="landing-avatar-stack" aria-hidden="true"><i>M</i><i>L</i><i>N</i></span>
+          <span className="landing-proof-icon" aria-hidden="true"><Icon name="chat" size={15}/></span>
           <span>{t('landingProof')}</span>
         </div>
       </div>
@@ -27,15 +27,15 @@ export function LandingHero() {
           <div className="landing-preview-head">
             <span className="landing-preview-mark"><BrandMark /></span>
             <div><b>{t('landingPreviewName')}</b><small><i />{t('landingPreviewOnline')}</small></div>
-            <button type="button" aria-label={t('more')}><Icon name="more" size={16} /></button>
+            <span className="landing-preview-status"><Icon name="lock" size={13}/></span>
           </div>
           <p className="landing-preview-context">{t('landingPreviewContext')}</p>
           <div className="landing-message-row">
-            <span className="landing-person">M</span>
+            <span className="landing-person"><Icon name="chat" size={15}/></span>
             <div><b>{t('landingPreviewName')}</b><p>{t('landingPreviewMessage')}</p><time>18:42</time></div>
           </div>
           <div className="landing-message-row landing-message-own">
-            <span className="landing-person person-y">Y</span>
+            <span className="landing-person person-y"><Icon name="spark" size={14}/></span>
             <div><b>{t('landingPreviewYou')}</b><p>{t('landingPreviewReply')}</p><time>18:43</time></div>
           </div>
           <div className="landing-preview-composer"><span>{t('landingPreviewCompose')}</span><span><Icon name="plus" size={14} /><Icon name="send" size={14} /></span></div>
