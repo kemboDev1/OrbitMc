@@ -120,6 +120,10 @@ export default function App() {
   const title = t(view);
 
   const toView = (next: View) => { setView(next); setProfileMenu(false); };
+  const openAuth = () => {
+    window.history.replaceState(null, '', window.location.pathname);
+    setAuthOpen(true);
+  };
   const pickUser = (person: User) => {
     if (!user) return;
     const next = startDM(user.id, person.id);
@@ -137,13 +141,14 @@ export default function App() {
   const markSignedOut = () => { setChannel(null); setView('chats'); setProfileMenu(false); };
 
   if (!authReady) return <main className="app-loading" role="status">{t('loading')}</main>;
-  if (!user) return <>{restoreError && <div className="restore-notice" role="alert">{restoreError}</div>}{authOpen ? <AuthScreen initial="signin" onCancel={() => setAuthOpen(false)} onDone={() => { setRestoreError(''); setAuthOpen(false); setView('chats'); setChannel(null); }}/> : <LandingPage onEnter={() => setAuthOpen(true)}/>}<ToastHost/></>;
+  if (!user) return <>{restoreError && <div className="restore-notice" role="alert">{restoreError}</div>}{authOpen ? <AuthScreen initial="signin" onCancel={() => setAuthOpen(false)} onDone={() => { setRestoreError(''); setAuthOpen(false); setView('chats'); setChannel(null); }}/> : <LandingPage onEnter={openAuth}/>}<ToastHost/></>;
 
   const report = (error: unknown) => tell(error instanceof AppError ? t(error.key) : t('err.generic'), 'bad');
   const signOutNow = async () => { try { await signOut(); markSignedOut(); } catch (error) { report(error); } };
   const nav = (item: {key: View; icon: IconName}, compact = false) => <button key={item.key} aria-label={t(item.key)} title={compact ? t(item.key) : undefined} className={`nav-link ${view === item.key ? 'active' : ''} ${compact ? 'rail-link' : ''}`} onClick={() => toView(item.key)}><span className="nav-icon"><Icon name={item.icon} size={19}/>{item.key === 'chats' && recentDms.some((x) => x.unseen) && <i className="nav-unread"/>}</span>{!compact && <span>{t(item.key)}</span>}{compact && view === item.key && <i className="rail-active-dot"/>}</button>;
 
   return <div className={`app-shell ${pref.density === 'compact' ? 'density-compact' : ''}`} data-color-theme={marketTheme ? (marketTheme.dark ? 'dark' : 'light') : undefined} style={appStyle}>
+    {restoreError && <div className="restore-notice" role="alert">{restoreError}</div>}
     <aside className="icon-rail">
       <button className="rail-logo" aria-label={t('brand')} title={t('brand')} onClick={() => toView('chats')}><BrandMark/></button>
       <span className="rail-divider"/>

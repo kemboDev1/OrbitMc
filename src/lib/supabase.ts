@@ -18,3 +18,7 @@ export function requireSupabase() {
   if (!endpoint || !publicKey || !supabase) throw new AppError('err.supabaseConfigMissing');
   return supabase;
 }
+
+export function getAuthRedirectUrl() {
+  return import.meta.env?.VITE_SUPABASE_REDIRECT_URL?.trim() || window.location.origin;
+}

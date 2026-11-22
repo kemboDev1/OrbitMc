@@ -2,7 +2,7 @@ import { LIMITS } from '../config';
 import { db } from './db';
 import { AppError } from './errors';
 import { fetchProfile, syncRemoteWorkspace, updateRemoteProfile } from './cloud';
-import { requireSupabase } from '../lib/supabase';
+import { getAuthRedirectUrl, requireSupabase } from '../lib/supabase';
 import { session } from './session';
 import type { User } from './types';
 
@@ -58,7 +58,7 @@ export async function register(input: { email: string; username: string; name: s
   const { data, error } = await client.auth.signUp({
     email,
     password: input.password,
-    options: { data: { username, display_name: name } },
+    options: { data: { username, display_name: name }, emailRedirectTo: getAuthRedirectUrl() },
   });
   if (error) throw mapAuthError(error.message);
   if (!data.user) throw new AppError('err.backendUnavailable');
@@ -92,8 +92,11 @@ export async function restoreSession(): Promise<void> {
     return;
   }
   const user = await fetchProfile(data.session.user.id);
-  await syncRemoteWorkspace(user.id);
+  db.transaction((state) => {
+    state.users[user.id] = user;
+  });
   session.start(user.id, data.session.access_token, data.session.expires_at);
+  await syncRemoteWorkspace(user.id);
 }
 
 export async function signOut(): Promise<void> {
@@ -117,7 +120,7 @@ export async function resetPassword(email: string): Promise<void> {
   const client = requireSupabase();
   const normalized = cleanEmail(email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new AppError('err.emailInvalid');
-  const { error } = await client.auth.resetPasswordForEmail(normalized, { redirectTo: window.location.origin });
+  const { error } = await client.auth.resetPasswordForEmail(normalized, { redirectTo: getAuthRedirectUrl() });
   if (error) throw mapAuthError(error.message);
 }
 
