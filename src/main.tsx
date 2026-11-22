@@ -4,5 +4,5 @@ import App from './App';
 import './styles/index.css';
 
 const root = document.getElementById('root');
-if (!root) throw new Error('The Sado page could not start.');
+if (!root) throw new Error('The OrbitMc page could not start.');
 createRoot(root).render(<StrictMode><App/></StrictMode>);

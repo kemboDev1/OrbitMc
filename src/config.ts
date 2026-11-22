@@ -1,7 +1,7 @@
 import type { AuraTier } from './data/types';
 
 /** Rename the product here. */
-export const BRAND = 'Sado';
+export const BRAND = 'OrbitMc';
 
 export const LIMITS = {
   message: 2000,

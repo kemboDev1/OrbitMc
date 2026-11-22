@@ -386,7 +386,7 @@ kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; 
 .person-card > svg { color: var(--faint); }
 .demo-helper { margin-top: 22px; color: var(--faint); font-size: 9px; line-height: 1.6; }
 
-/* Bazaar */
+/* Orbit Shop */
 .market-page { max-width: 1130px; padding-top: 25px; }
 .market-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 19px; }
 .market-copy { min-width: 0; }
@@ -467,7 +467,7 @@ kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; 
 .gift-preview > span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--panel); font-size: 18px; }.gift-preview b { flex: 1; font-size: 10px; }.gift-preview small { color: var(--aura); font: 9px 'JetBrains Mono', monospace; }
 .gift-recipient, .new-chat-contact { display: flex; min-height: 48px; align-items: center; gap: 9px; padding: 6px; border: 0; border-radius: 7px; background: transparent; text-align: left; }.gift-recipient:hover, .new-chat-contact:hover { background: var(--raised); }.gift-recipient > span:nth-child(2), .new-chat-contact > span:nth-child(2) { flex: 1; font-size: 10px; }.gift-recipient > svg { color: var(--faint); }
 
-/* Aura */
+/* Orbit+ */
 .aura-page { max-width: 1050px; }
 .aura-hero { position: relative; min-height: 226px; overflow: hidden; isolation: isolate; display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding: 25px 31px; border: 1px solid #b78a5333; border-radius: 11px; background: #231f1a; }
 .aura-hero::before { position: absolute; z-index: -1; inset: 0; background: radial-gradient(ellipse at 73% 44%, #ce9c5344, transparent 38%), linear-gradient(116deg, #211c17, #302820 66%, #4a3b29); content: ''; }

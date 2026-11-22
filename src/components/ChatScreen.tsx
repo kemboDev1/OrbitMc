@@ -73,7 +73,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 360 || messages.at(-1)?.by === user.id) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     const last = messages.at(-1);
     if (last && last.by !== user.id && document.hidden && pref.desktop) {
-      const author = data.users[last.by]?.name ?? 'Sado';
+      const author = data.users[last.by]?.name ?? 'OrbitMc';
       notify(author, last.text || last.sticker || t('messagePlaceholder'));
     }
   }, [channel, messages.length, user.id, editId, data.users, pref.desktop, t]);
@@ -185,7 +185,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
             {!grouped && <div className="message-avatar"><Avatar user={person} size="sm"/></div>}
             {grouped && <time className="group-time" title={fmtTime(msg.ts, lang)}>{fmtTime(msg.ts, lang)}</time>}
             <div className="message-main">
-              {!grouped && <div className="message-byline"><button className="message-name" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{person.name}</button>{hasAura(person.id) && <span className="aura-inline"><Icon name="spark" size={10}/> AURA</span>}<time>{fmtTime(msg.ts, lang)}</time>{isMine && <span className="message-mine-tag">{t('you')}</span>}</div>}
+              {!grouped && <div className="message-byline"><button className="message-name" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{person.name}</button>{hasAura(person.id) && <span className="aura-inline"><Icon name="spark" size={10}/> ORBIT</span>}<time>{fmtTime(msg.ts, lang)}</time>{isMine && <span className="message-mine-tag">{t('you')}</span>}</div>}
               {replyMessage && <button className="reply-preview" onClick={() => jumpTo(replyMessage.id)}><Icon name="reply" size={12}/><span>{t('replyBadge')} {data.users[replyMessage.by]?.name ?? t('you')}:</span><em>{replyMessage.text || replyMessage.sticker}</em></button>}
               {editId === msg.id ? <form className="edit-message" onSubmit={(e) => { e.preventDefault(); editSave(msg); }}><input ref={editRef} value={editText} maxLength={maxChars} onChange={(e) => setEditText(e.target.value)}/><div><button type="button" className="text-action" onClick={() => setEditId(null)}>{t('cancel')}</button><button type="submit" className="btn btn-primary btn-small">{t('save')}</button></div></form> : <>
                 {msg.text && <p className="message-text">{msg.text}{msg.edited && <span className="edited-label"> · {t('edit').toLowerCase()}</span>}</p>}

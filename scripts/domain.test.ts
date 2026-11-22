@@ -54,7 +54,7 @@ test('account, chat, rooms, bazaar and backup work together', async () => {
   subscribeAura(user.id, 'flare', 'month');
   assert.equal(hasAura(user.id), true);
   const sellerBeforeAuraSale = db.get().users[user.id].sparks;
-  const auraSale = createListing({ userId: user.id, kind: 'stickers', name: 'Aura set', about: 'Made for you', price: 25, stickers: ['🫶', '✨', '🥹', '🌙', '🌱', '🤍'] });
+  const auraSale = createListing({ userId: user.id, kind: 'stickers', name: 'Orbit set', about: 'Made for you', price: 25, stickers: ['🫶', '✨', '🥹', '🌙', '🌱', '🤍'] });
   db.transaction((data) => { data.users.u_mila.sparks = 100; });
   buyListing('u_mila', auraSale.id);
   assert.equal(db.get().users[user.id].sparks, sellerBeforeAuraSale + 23, 'Flare sellers pay the configured 5% fee');

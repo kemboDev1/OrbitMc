@@ -3,3 +3,8 @@ dist
 .vercel
 .DS_Store
 *.local
+electron/release
+electron/win32-x64
+electron/darwin-x64
+electron/linux-x64
+*.{nsi,iss}

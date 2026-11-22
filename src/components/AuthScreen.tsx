@@ -41,7 +41,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
   return <main className="auth-page">
     <div className="auth-shell">
       <section className="auth-art">
-        <div className="auth-brand"><BrandMark /><span>SADO</span></div>
+        <div className="auth-brand"><BrandMark /><span>ORBITMC</span></div>
         <div className="auth-illustration" aria-hidden="true">
           <span className="orbit orbit-a"/><span className="orbit orbit-b"/><span className="orbit orbit-c"/>
           <span className="illustration-spark">✳</span><span className="illustration-star star-a">✳</span><span className="illustration-star star-b">✳</span>
@@ -54,7 +54,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
       </section>
 
       <section className="auth-panel">
-        <div className="auth-mobile-brand"><BrandMark/><span>SADO</span></div>
+        <div className="auth-mobile-brand"><BrandMark/><span>ORBITMC</span></div>
         <div className="auth-form-wrap">
           <div className="auth-locale">
             {onCancel && <button type="button" className="lang-chip auth-back" onClick={onCancel}>{t('backToApp')}</button>}
@@ -83,7 +83,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
           </form>
           <p className="auth-terms">{t('terms')}</p>
         </div>
-        <footer className="auth-footer"><span>© SADO 2025</span><span className="auth-footer-line"/><span>{t('authFooter')}</span></footer>
+        <footer className="auth-footer"><span>© ORBITMC 2025</span><span className="auth-footer-line"/><span>{t('authFooter')}</span></footer>
       </section>
     </div>
     <Modal open={resetOpen} onClose={() => setResetOpen(false)} title={t('resetPassword')} subtitle={t('recoveryHint')} size="sm"><button className="btn btn-primary btn-full" onClick={() => setResetOpen(false)}>{t('backToApp')}</button></Modal>

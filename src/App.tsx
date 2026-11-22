@@ -128,7 +128,7 @@ export default function App() {
     </aside>
 
     <aside className="side-panel">
-      <div className="side-brand-row"><button className="wordmark" onClick={() => toView('chats')}><BrandMark/><span>SADO</span><Icon name="down" size={14}/></button><button className="side-search-button" onClick={() => window.dispatchEvent(new CustomEvent('sado:search', { detail: {} }))} aria-label={t('openSearch')} title={t('openSearch')}><Icon name="search" size={16}/><span>{t('search')}</span><kbd>⌘K</kbd></button></div>
+      <div className="side-brand-row"><button className="wordmark" onClick={() => toView('chats')}><BrandMark/><span>ORBITMC</span><Icon name="down" size={14}/></button><button className="side-search-button" onClick={() => window.dispatchEvent(new CustomEvent('sado:search', { detail: {} }))} aria-label={t('openSearch')} title={t('openSearch')}><Icon name="search" size={16}/><span>{t('search')}</span><kbd>⌘K</kbd></button></div>
       <div className="side-scroll">
         <section className="side-primary-links">{navItems.map((item) => nav(item))}</section>
         <section className="side-list-section"><div className="side-section-title"><span>{t('directSection')}</span><button aria-label={t('newMessage')} title={t('newMessage')} onClick={() => setNewChatOpen(true)}><Icon name="plus" size={15}/></button></div>
@@ -149,7 +149,6 @@ export default function App() {
     </aside>
 
     <main className="main-area">
-      <header className="topbar"><div className="topbar-title"><span className="topbar-location">SADO&nbsp; / &nbsp;{view === 'chats' ? t('chat') : title}</span><h1>{view === 'chats' ? channel?.startsWith('dm:') ? data.users[channel.split(':').filter(Boolean).at(-1) ?? '']?.name ?? t('chat') : Object.values(data.hubs).flatMap((h) => h.rooms.map((r) => ({ r, h }))).find((x) => x.r.id === channel)?.h.name ?? t('chat') : title}</h1></div><div className="topbar-actions"><button className="icon-btn header-search" aria-label={t('openSearch')} title={t('openSearch')} onClick={() => window.dispatchEvent(new CustomEvent('sado:search', { detail: {} }))}><Icon name="search" size={18}/></button>{view === 'chats' && <button className="btn btn-primary btn-small top-new-chat" onClick={() => setNewChatOpen(true)}><Icon name="plus" size={15}/><span>{t('newMessage')}</span></button>}{view === 'hubs' && <button className="btn btn-primary btn-small" onClick={newHub}><Icon name="plus" size={15}/><span>{t('createHub')}</span></button>}{view === 'bazaar' && <button className="btn btn-primary btn-small" onClick={() => window.dispatchEvent(new CustomEvent('sado:market-create'))}><Icon name="plus" size={15}/><span>{t('makeListing')}</span></button>}<button className="top-profile-button" onClick={() => { setStatusDraft(user.statusText); setProfileMenu((v) => !v); }} aria-label={t('profile')}><Avatar user={user} size="sm" showStatus/></button></div></header>
       <div className="view-stage" key={view}>
         {view === 'chats' && <ChatScreen db={data} user={user} channel={channel} setChannel={setChannel} onStartChat={() => setNewChatOpen(true)} onNewHub={newHub}/>}
         {view === 'hubs' && <HubPage db={data} user={user} onOpen={openHub} onCreate={newHub}/>}

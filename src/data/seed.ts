@@ -10,7 +10,7 @@ function bot(id: string, username: string, name: string, presence: User['presenc
     id,
     username,
     name,
-    bio: 'A friendly face from the Sado crew.',
+    bio: 'A member of the OrbitMc community.',
     hue: hueOf(username),
     presence,
     statusText,
@@ -64,16 +64,16 @@ const hubs: Record<string, Hub> = {
   h_slow: hub('h_slow', 'After Hours', 'Small conversations, softer music, and the space to just be.', '🌙', ['lobby', 'what-listening', 'night-owls'], 0),
   h_studio: hub('h_studio', 'Soft Launch Studio', 'A cozy corner for people making things and showing the messy middle.', '✳', ['front-room', 'work-in-progress', 'feedback'], 1),
   h_arcade: hub('h_arcade', 'Arcade Club', 'Good games, friendly lobbies, absolutely no backseating.', '◎', ['lobby', 'looking-for-group', 'high-scores'], 2),
-  h_garden: hub('h_garden', 'Tiny Gardeners', 'A corner to grow plants, patience, and a few surprising tomatoes.', '❋', ['potting-shed', 'show-your-plants', 'plant-help'], 3),
+  h_garden: hub('h_garden', 'Garden Circle', 'A shared space for plants, practical advice, and growing a little at a time.', '❋', ['potting-shed', 'show-your-plants', 'plant-help'], 3),
   h_books: hub('h_books', 'Page Turner', 'Readers with a weakness for one-more-chapter nights.', '⁖', ['the-stacks', 'currently-reading', 'monthly-pick'], 4),
 };
 
 const listings: Record<string, Listing> = {};
 const products: Array<{ name: string; about: string; price: number; kind: Listing['kind']; stickers?: string[]; auraOnly?: boolean; hue: string; theme?: Listing['theme']; frame?: Listing['frame'] }> = [
-  { name: 'Little feelings', about: 'Tiny expressive friends, for when words miss.', price: 90, kind: 'stickers', stickers: ['🥹', '🫠', '🫶', '🥲', '😮‍💨', '🙃', '😵‍💫', '🤍'], hue: 'coral' },
-  { name: 'Pocket garden', about: 'Soft, sunlit sticker set for plant people.', price: 120, kind: 'stickers', stickers: ['🌱', '🌷', '🪴', '🍃', '🌻', '🌿', '🌼', '🌵'], hue: 'green' },
+  { name: 'Expression set', about: 'A restrained expressive set for everyday replies.', price: 90, kind: 'stickers', stickers: ['🥹', '🫠', '🫶', '🥲', '😮‍💨', '🙃', '😵‍💫', '🤍'], hue: 'coral' },
+  { name: 'Botanical set', about: 'A sunlit sticker set for plant enthusiasts.', price: 120, kind: 'stickers', stickers: ['🌱', '🌷', '🪴', '🍃', '🌻', '🌿', '🌼', '🌵'], hue: 'green' },
   { name: 'Midnight doodles', about: 'A little ink, a little moonlight, lots of personality.', price: 150, kind: 'stickers', stickers: ['🌘', '✨', '🖋️', '🫧', '🌒', '🪐', '🕯️', '☄️'], hue: 'purple' },
-  { name: 'Lemon fizz', about: 'A bright little patch of sunshine for your screen.', price: 180, kind: 'theme', hue: 'yellow', theme: { dark: false, bg: '#fffbee', panel: '#fffdf5', raised: '#fff7dd', line: '#eadfb8', accent: '#dc8c08' } },
+  { name: 'Citrus', about: 'A warm, bright theme for clear daytime reading.', price: 180, kind: 'theme', hue: 'yellow', theme: { dark: false, bg: '#fffbee', panel: '#fffdf5', raised: '#fff7dd', line: '#eadfb8', accent: '#dc8c08' } },
   { name: 'Blue hour', about: 'Slow dusk. Deep ink. Warm lights in the distance.', price: 220, kind: 'theme', hue: 'blue', theme: { dark: true, bg: '#10151d', panel: '#161d29', raised: '#1e2836', line: '#293547', accent: '#78aafc' } },
   { name: 'Sunday paper', about: 'Oat milk and good stationery, in screen form.', price: 180, kind: 'theme', hue: 'paper', theme: { dark: false, bg: '#f5f0e5', panel: '#fdf9f0', raised: '#eee7d9', line: '#ded4c2', accent: '#8b6348' } },
   { name: 'Orbit ring', about: 'A quiet orbit that says you are here.', price: 240, kind: 'frame', hue: 'orange', auraOnly: true, frame: { colors: ['#ff4f2e', '#e7aa56', '#e85e39'], spin: true } },

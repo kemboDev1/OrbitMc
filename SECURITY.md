@@ -2,7 +2,7 @@
 
 ## Scope
 
-Sado in this repository is a local browser prototype. It has no production API, central identity system, hosted database, payment service, device synchronization, moderation service or end-to-end encryption. The visible sign-in only gates one browser's local data. Browser profile access, malicious same-origin JavaScript, a compromised device, stolen backup files and browser extensions are outside that demo's protection.
+OrbitMc in this repository is a local browser prototype. It has no production API, central identity system, hosted database, payment service, device synchronization, moderation service or end-to-end encryption. The visible sign-in only gates one browser's local data. Browser profile access, malicious same-origin JavaScript, a compromised device, stolen backup files and browser extensions are outside that demo's protection.
 
 Please do not submit a password, token, personal information or sensitive conversation to a public issue. There is no production service in this repository to report a live-service vulnerability against. For code-level security questions, open a private repository discussion with a minimal, non-sensitive reproduction.
 
@@ -22,7 +22,7 @@ These controls reduce some browser risks; they do not replace server-side securi
 - Move password authentication and session management to reviewed server-side code. Add verified recovery, session revocation, secure cookie settings, MFA where appropriate, and server-side throttling.
 - Choose an appropriate end-to-end encryption design only if the product can safely support key creation, verification, recovery and multi-device operation; do not market transport encryption as end-to-end encryption.
 - Store uploads outside the application bundle with authorization, type/size checks, malware scanning and retention controls. Use signed, scoped access where suitable.
-- Replace demo replies, local sparks and local Aura toggles with audited services. Do not grant a paid plan from a browser-only update.
+- Replace demo replies, local credits and local Orbit+ toggles with audited services. Do not grant a paid plan from a browser-only update.
 - Implement anti-spam, reporting, blocking, moderation escalation and incident-response processes.
 - Review dependency versions and advisories, lock dependencies, audit the deployed headers, test the CSP, perform accessibility checks and obtain independent security review.
 - Publish clear privacy, retention, deletion, payment, subscription cancellation and support policies before collecting real user data or money.

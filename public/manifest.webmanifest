@@ -1,7 +1,7 @@
 {
-  "name": "Sado",
-  "short_name": "Sado",
-  "description": "Chats, hubs, a bazaar and Aura perks in one place.",
+  "name": "OrbitMc",
+  "short_name": "OrbitMc",
+  "description": "Chats, hubs, the Orbit Shop and Orbit+ perks in one place.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",

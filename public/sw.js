@@ -1,4 +1,4 @@
-/* Sado service worker: makes the app installable and keeps the shell available offline. */
+/* OrbitMc service worker: makes the app installable and keeps the shell available offline. */
 const CACHE = 'sado-shell-v1';
 const SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png'];
 
