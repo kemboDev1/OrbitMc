@@ -38,6 +38,7 @@ export function validatePassword(password: string) {
 
 function mapAuthError(message: string): AppError {
   const lower = message.toLowerCase();
+  if (lower.includes('no api key') || lower.includes('api key')) return new AppError('err.supabaseConfigMissing');
   if (lower.includes('username') && (lower.includes('duplicate') || lower.includes('unique') || lower.includes('already'))) return new AppError('err.usernameTaken');
   if (lower.includes('already registered') || lower.includes('already exists')) return new AppError('err.emailTaken');
   if (lower.includes('invalid login credentials')) return new AppError('err.signIn');

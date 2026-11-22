@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
 import { detectDesktopTarget, fetchLatestRelease, releaseAssetFor, RELEASES_BASE, TARGET_LABEL, type DesktopTarget, type ReleaseAsset, isMobile } from '../lib/downloads';
+import { installApp, installed, isStandalone } from '../lib/pwa';
 import { Icon } from './Icons';
 
 type ReleaseStatus = 'loading' | 'ready' | 'missing' | 'error';
@@ -10,8 +11,10 @@ export function DownloadSection() {
   const { t } = useI18n();
   const target = detectDesktopTarget();
   const mobile = isMobile();
+  const isInstalled = installed.use() || isStandalone();
   const [assets, setAssets] = useState<ReleaseAsset[]>([]);
   const [status, setStatus] = useState<ReleaseStatus>('loading');
+  const [installGuidance, setInstallGuidance] = useState<'manual' | 'error' | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -25,20 +28,33 @@ export function DownloadSection() {
     return () => { active = false; };
   }, []);
 
+  const install = async () => {
+    setInstallGuidance(null);
+    try {
+      if (!await installApp()) setInstallGuidance('manual');
+    } catch {
+      setInstallGuidance('error');
+    }
+  };
+
   const currentAsset = releaseAssetFor(target, assets);
-  const note = mobile
-    ? t('downloadMobileNote')
-    : target === 'unknown'
-      ? t('downloadUnknownNote')
-      : status === 'loading'
-        ? t('releaseChecking')
-        : status === 'error'
-          ? t('releaseLookupFailed')
-          : status === 'missing'
-            ? t('releaseUnavailable')
-            : currentAsset
-              ? t('downloadReadyNote')
-              : t('downloadNoPlatformAsset');
+  const note = installGuidance === 'manual'
+    ? t('landingInstallSteps')
+    : installGuidance === 'error'
+      ? t('installPromptFailed')
+      : mobile
+        ? t('downloadMobileNote')
+        : target === 'unknown'
+          ? t('downloadUnknownNote')
+          : status === 'loading'
+            ? t('releaseChecking')
+            : status === 'error'
+              ? t('releaseLookupFailed')
+              : status === 'missing'
+                ? t('releaseUnavailable')
+                : currentAsset
+                  ? t('downloadReadyNote')
+                  : t('downloadNoPlatformAsset');
   const availablePlatforms = platforms.filter((platform) => releaseAssetFor(platform, assets));
 
   return (
@@ -53,10 +69,10 @@ export function DownloadSection() {
               <span>{t('downloadButton')} <strong>{TARGET_LABEL[target]}</strong></span>
             </a>
           ) : (
-            <a href="#install" className="landing-primary download-main">
+            <button type="button" className="landing-primary download-main" onClick={install} disabled={isInstalled}>
               <Icon name="download" size={17} />
-              <span>{t('landingDownload')}</span>
-            </a>
+              <span>{isInstalled ? t('landingInstalled') : t('landingDownload')}</span>
+            </button>
           )}
           <a className="landing-text-link" href={RELEASES_BASE} target="_blank" rel="noopener noreferrer">
             {t('viewReleases')} <Icon name="arrowUpRight" size={16} />
