@@ -20,7 +20,12 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export const isStandalone = () => typeof matchMedia !== 'undefined' && matchMedia('(display-mode: standalone)').matches;
+export const isStandalone = () => {
+  if (typeof window === 'undefined') return false;
+  const displayMode = typeof matchMedia !== 'undefined' && matchMedia('(display-mode: standalone)').matches;
+  const appleHomeScreen = 'standalone' in navigator && (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return displayMode || appleHomeScreen;
+};
 
 /** Returns false when the browser has no install prompt, so the caller can show manual steps. */
 export async function installApp(): Promise<boolean> {

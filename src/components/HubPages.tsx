@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { DB, Hub, User } from '../data/types';
-import { addRoom, joinHub, joinInvite, leaveHub, makeHub } from '../data/hubs';
+import { joinHub, makeHub } from '../data/hubs';
+import { hasAura } from '../data/market';
 import { fmtShort } from '../lib/util';
 import { useI18n } from '../i18n';
 import { Avatar, AvatarPile } from './Avatar';
@@ -17,10 +18,10 @@ export function HubPage({ db, user, onOpen, onCreate }: { db: DB; user: User; on
   const [query, setQuery] = useState('');
   const joined = useMemo(() => Object.values(db.hubs).filter((h) => !!h.members[user.id]), [db.hubs, user.id]);
   const discover = useMemo(() => Object.values(db.hubs).filter((h) => h.public && !h.members[user.id] && `${h.name} ${h.about}`.toLowerCase().includes(query.toLowerCase())), [db.hubs, user.id, query]);
-  const join = (h: Hub) => { try { joinHub(h.id, user.id); tell(t('hubJoined'), 'good'); } catch { tell(t('err.generic'), 'bad'); } };
+  const join = async (h: Hub) => { try { await joinHub(h.id, user.id); tell(t('hubJoined'), 'good'); } catch (error) { tell(error instanceof AppError ? t(error.key) : t('err.generic'), 'bad'); } };
   return <div className="page-content hub-page">
     <div className="page-heading"><div><div className="eyebrow">{t('hubTitleTag')}</div><h1>{t('hubs')}</h1><p>{t('discoverHubs')}</p></div><button className="btn btn-primary" onClick={onCreate}><Icon name="plus" size={16}/>{t('createHub')}</button></div>
-    <p className="local-feature-note">{t('hubsLocalNotice')}</p>
+    <p className="local-feature-note">{t(user.serverBacked ? 'hubsLiveNotice' : 'hubsLocalNotice')}</p>
     <div className="hub-section-head"><h2>{t('yourHubs')} <span className="count-pill">{joined.length}</span></h2>{joined.length === 0 && <button className="btn btn-secondary btn-small" onClick={onCreate}>{t('makeHubFirst')}</button>}</div>
     {joined.length > 0 ? <div className="hub-grid">{joined.map((h) => {
       const members = Object.keys(h.members).map((id) => db.users[id]).filter(Boolean);
@@ -43,9 +44,13 @@ export function CreateHubModal({ open, onClose, user, onCreated }: { open: boole
   const [emoji, setEmoji] = useState('✳');
   const [isPublic, setIsPublic] = useState(true);
   const [error, setError] = useState('');
-  const submit = (e: FormEvent) => {
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
     e.preventDefault(); setError('');
-    try { const h = makeHub({ userId: user.id, name, about, emoji, public: isPublic }); onCreated(h); setName(''); setAbout(''); onClose(); } catch (e) { setError(e instanceof AppError ? t(e.key) : t('err.generic')); }
+    if (busy) return;
+    setBusy(true);
+    try { const h = await makeHub({ userId: user.id, name, about, emoji, public: isPublic }); onCreated(h); setName(''); setAbout(''); onClose(); } catch (e) { setError(e instanceof AppError ? t(e.key) : t('err.generic')); }
+    finally { setBusy(false); }
   };
   return <Modal open={open} onClose={onClose} title={t('createHub')} subtitle={t('makeHubFirst')} size="md"><form className="stack-form" onSubmit={submit}>
     <label className="field-label">{t('hubName')}<input className="field-input" autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.hubName} placeholder={t('hubName')}/></label>
@@ -53,7 +58,7 @@ export function CreateHubModal({ open, onClose, user, onCreated }: { open: boole
     <div className="field-label">{t('hubEmoji')}<div className="symbol-picker">{symbols.map((s, i) => <button key={`${s}${i}`} type="button" className={`symbol-option ${emoji === s ? 'picked' : ''}`} onClick={() => setEmoji(s)}>{s}</button>)}</div></div>
     <div className="field-label">{t('hubPrivacy')}<div className="segmented-choice"><button type="button" className={isPublic ? 'selected' : ''} onClick={() => setIsPublic(true)}>{t('publicHub')}</button><button type="button" className={!isPublic ? 'selected' : ''} onClick={() => setIsPublic(false)}>{t('privateHub')}</button></div></div>
     {error && <div className="inline-error" role="alert"><Icon name="info" size={15}/>{error}</div>}
-    <div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>{t('cancel')}</button><button type="submit" className="btn btn-primary"><Icon name="plus" size={15}/>{t('create')}</button></div>
+    <div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>{t('cancel')}</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy ? t('loading') : <><Icon name="plus" size={15}/>{t('create')}</>}</button></div>
   </form></Modal>;
 }
 
@@ -63,7 +68,7 @@ export function PeoplePage({ db, user, onChat }: { db: DB; user: User; onChat: (
   const others = useMemo(() => Object.values(db.users).filter((p) => p.serverBacked && p.id !== user.id && `${p.name} ${p.username}`.toLowerCase().includes(q.toLowerCase())), [db.users, user.id, q]);
   return <div className="page-content people-page">
     <div className="page-heading"><div><div className="eyebrow">THE GOOD PEOPLE</div><h1>{t('people')}</h1><p>{t('welcomeSub')}</p></div><label className="page-search"><Icon name="search" size={17}/><input placeholder={t('search')} value={q} onChange={(e) => setQ(e.target.value)}/></label></div>
-    {others.length ? <div className="people-list">{others.map((p) => <button key={p.id} className="person-card" onClick={() => onChat(p.id)}><Avatar user={p} size="lg" showStatus/><div className="person-card-info"><h3>{p.name}{p.aura && <span className="aura-inline"><Icon name="spark" size={10}/> ORBIT</span>}</h3><small>@{p.username}</small><p>{p.statusText || p.bio || t('welcomeSub')}</p></div><span className="person-presence"><i className={`status-mini status-${p.presence}`}/>{t(p.presence)}</span><Icon name="chevron" size={16}/></button>)}</div> : <div className="inline-empty"><div className="empty-mark">◎</div><p>{t('noPeople')}</p></div>}
+    {others.length ? <div className="people-list">{others.map((p) => <button key={p.id} className="person-card" onClick={() => onChat(p.id)}><Avatar user={p} size="lg" showStatus/><div className="person-card-info"><h3>{p.name}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10}/></span>}</h3><small>@{p.username}</small><p>{p.statusText || p.bio || t('welcomeSub')}</p></div><span className="person-presence"><i className={`status-mini status-${p.presence}`}/>{t(p.presence)}</span><Icon name="chevron" size={16}/></button>)}</div> : <div className="inline-empty"><div className="empty-mark">◎</div><p>{t('noPeople')}</p></div>}
     <p className="demo-helper">{t('demoNote')}</p>
   </div>;
 }

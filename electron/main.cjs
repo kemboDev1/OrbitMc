@@ -1,8 +1,41 @@
-const { app, BrowserWindow, shell, Menu, dialog } = require('electron');
+const { app, BrowserWindow, shell, Menu } = require('electron');
 const path = require('path');
+const { fileURLToPath } = require('url');
 const isDev = !!process.env.VITE_DEV_SERVER || !app.isPackaged;
 
 let mainWindow = null;
+
+function isAppEntry(url) {
+  try {
+    const destination = new URL(url);
+    if (isDev) return destination.origin === 'http://localhost:5173';
+    return destination.protocol === 'file:'
+      && path.resolve(fileURLToPath(destination)) === path.resolve(__dirname, '..', 'dist', 'index.html');
+  } catch {
+    return false;
+  }
+}
+
+function openSafeExternal(url) {
+  try {
+    const destination = new URL(url);
+    if (destination.protocol === 'https:') void shell.openExternal(destination.href).catch(() => undefined);
+  } catch {
+    // Ignore invalid URLs instead of handing unsafe schemes to the host OS.
+  }
+}
+
+function secureWebContents(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    openSafeExternal(url);
+    return { action: 'deny' };
+  });
+  contents.on('will-navigate', (event, url) => {
+    if (isAppEntry(url)) return;
+    event.preventDefault();
+    openSafeExternal(url);
+  });
+}
 
 function createMenu() {
   const template = [
@@ -67,13 +100,13 @@ function createMenu() {
         {
           label: 'Learn More',
           click: async () => {
-            await shell.openExternal('https://github.com/kemboDev1/sado');
+            await shell.openExternal('https://github.com/kemboDev1/OrbitMc');
           }
         },
         {
           label: 'Report Issue',
           click: async () => {
-            await shell.openExternal('https://github.com/kemboDev1/sado/issues');
+            await shell.openExternal('https://github.com/kemboDev1/OrbitMc/issues');
           }
         }
       ]
@@ -104,11 +137,6 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-  });
-
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
   });
 
   if (isDev) {
@@ -150,8 +178,5 @@ app.on('window-all-closed', () => {
 });
 
 app.on('web-contents-created', (event, contents) => {
-  contents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  secureWebContents(contents);
 });

@@ -1,5 +1,8 @@
 create extension if not exists pgcrypto;
 
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   username text not null unique check (username ~ '^[a-z0-9][a-z0-9_]{2,18}[a-z0-9]$'),
@@ -34,6 +37,10 @@ create index if not exists direct_messages_sender_created_idx
 create index if not exists direct_messages_recipient_created_idx
   on public.direct_messages (recipient_id, created_at desc);
 
+alter table public.direct_messages drop constraint if exists direct_messages_image_format;
+alter table public.direct_messages add constraint direct_messages_image_format
+  check (image is null or image ~ '^data:image/(jpeg|gif);base64,[A-Za-z0-9+/=]+$');
+
 alter table public.profiles enable row level security;
 alter table public.direct_messages enable row level security;
 
@@ -56,13 +63,13 @@ create policy "Users can send direct messages as themselves"
   with check (auth.uid() = sender_id and sender_id <> recipient_id);
 
 drop policy if exists "Senders can delete their direct messages" on public.direct_messages;
-create policy "Senders can delete their direct messages"
-  on public.direct_messages for delete to authenticated using (auth.uid() = sender_id);
 
-grant select, update on public.profiles to authenticated;
-grant select, insert, delete on public.direct_messages to authenticated;
+revoke all on public.profiles, public.direct_messages from public, anon, authenticated;
+grant select on public.profiles, public.direct_messages to authenticated;
+grant update (display_name, bio, avatar, presence, status_text) on public.profiles to authenticated;
+grant insert (sender_id, recipient_id, body, image, sticker, reply_to) on public.direct_messages to authenticated;
 
-create or replace function public.create_profile_for_new_user()
+create or replace function private.create_profile_for_new_user()
 returns trigger
 language plpgsql
 security definer
@@ -93,7 +100,8 @@ $$;
 drop trigger if exists on_auth_user_created_profile on auth.users;
 create trigger on_auth_user_created_profile
   after insert on auth.users
-  for each row execute procedure public.create_profile_for_new_user();
+  for each row execute procedure private.create_profile_for_new_user();
+revoke all on function private.create_profile_for_new_user() from public, anon, authenticated;
 
 create or replace function public.edit_direct_message(message_id uuid, new_body text)
 returns void

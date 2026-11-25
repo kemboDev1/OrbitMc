@@ -1,28 +1,32 @@
 # Security notes and reporting
 
-## Scope
+## Current architecture
 
-OrbitMc in this repository is a local browser prototype. It has no production API, central identity system, hosted database, payment service, device synchronization, moderation service or end-to-end encryption. The visible sign-in only gates one browser's local data. Browser profile access, malicious same-origin JavaScript, a compromised device, stolen backup files and browser extensions are outside that demo's protection.
+OrbitMc uses Supabase Auth for accounts. Profiles, direct messages, account blocks, community metadata, memberships, rooms, community messages, marketplace listings, virtual-credit balances, purchases and gifts are stored in Supabase. Mute preferences, cleared-history markers, appearance settings and Orbit+ subscription previews remain local. Virtual credits are not money and no payment is processed.
 
-Please do not submit a password, token, personal information or sensitive conversation to a public issue. There is no production service in this repository to report a live-service vulnerability against. For code-level security questions, open a private repository discussion with a minimal, non-sensitive reproduction.
+Messages are not end-to-end encrypted. The client sends message text and image data to the configured Supabase project. Do not use OrbitMc for sensitive or confidential conversations. The marketplace ledger is server-authoritative for virtual credits only; there is no payment processing, malware scanning, or abuse moderation.
 
 ## Existing safeguards
 
-- React renders user-authored text as text; user content is not interpreted as HTML.
-- Registration applies field limits, normalizes account names and hashes the password with a random salt using PBKDF2-HMAC-SHA-256 before storing the verifier.
-- The local database and imported backups are size-bounded and structurally validated. Conversation and profile text are length-limited. Uploads are re-encoded to bounded JPEG data URLs.
-- `vercel.json` sends a restrictive Content Security Policy, frame protection, MIME-sniffing protection, a strict referrer policy, HSTS, a restrictive Permissions Policy and same-origin opener policy.
-- The CSP permits JavaScript only from the site itself. Inline JavaScript is not required. Inline style attributes are allowed for the app's calculated theme colours; do not broaden `script-src` to accommodate an inline script.
+- Supabase Auth handles passwords and recovery; the client does not store account passwords in its app database.
+- The SQL migration enables RLS. Authenticated users can discover profiles and update their own profile. Direct-message reads are limited to participants; inserts must be from the authenticated sender; message mutations use narrowly scoped database functions that check message ownership or participation.
+- The server-side block migration lets each account manage only its own block rows. A database trigger rejects new direct messages in either direction for a blocked pair; old messages remain in history. The marketplace migration restricts wallet changes to server functions, validates item creation and performs purchases, gifts and seller credits atomically. The community migration restricts membership and room changes to checked database functions and lets only members read room messages.
+- Database functions use a fixed empty search path, validate message edits and reaction length, and have execution revoked from `public` and `anon` before being granted to `authenticated`.
+- The client validates profiles, messages, shop data, and imported backups; limits text and image sizes; and re-encodes avatar uploads. These client checks improve usability but are not a substitute for server-side validation.
+- `vercel.json` configures a restrictive Content Security Policy, frame protection, MIME-sniffing protection, a strict referrer policy, HSTS, a restrictive Permissions Policy, and same-origin opener policy.
+- Electron limits in-app navigation to the app entry point and opens external HTTPS links through the system browser.
 
-These controls reduce some browser risks; they do not replace server-side security, application security testing, or an external review.
+## Deployment requirements
 
-## Production launch checklist
+- Apply all files in `supabase/migrations/` in filename order to the intended Supabase project. Keep service-role keys and other server secrets out of the client bundle; only the Supabase URL and anon key belong in client environment variables.
+- Review the migration and the project's effective RLS policies, grants, realtime publication, Auth settings, backup and retention settings before public use. Test policies using separate authenticated users and anonymous access.
+- Treat Orbit+ status as a prototype. Do not sell credits or plans until there is a payment provider, server-verified plan entitlement, and reviewed purchase policy. Mute remains a local notification preference.
+- Do not describe OrbitMc as end-to-end encrypted. Supabase transport and storage controls do not provide end-to-end encryption.
 
-- Add a trusted backend and verify each viewer's identity and permissions on every read/write. Never trust a client-supplied user ID or hub role.
-- Move password authentication and session management to reviewed server-side code. Add verified recovery, session revocation, secure cookie settings, MFA where appropriate, and server-side throttling.
-- Choose an appropriate end-to-end encryption design only if the product can safely support key creation, verification, recovery and multi-device operation; do not market transport encryption as end-to-end encryption.
-- Store uploads outside the application bundle with authorization, type/size checks, malware scanning and retention controls. Use signed, scoped access where suitable.
-- Replace demo replies, local credits and local Orbit+ toggles with audited services. Do not grant a paid plan from a browser-only update.
-- Implement anti-spam, reporting, blocking, moderation escalation and incident-response processes.
-- Review dependency versions and advisories, lock dependencies, audit the deployed headers, test the CSP, perform accessibility checks and obtain independent security review.
-- Publish clear privacy, retention, deletion, payment, subscription cancellation and support policies before collecting real user data or money.
+## Before a public launch
+
+- Add paid-plan entitlements and moderation actions as server-validated transactions with anti-abuse limits. Community images still need storage controls, rate limits and moderation workflows before public launch.
+- Add reporting, rate limits, upload storage with type checks and malware scanning, and a retention/deletion process.
+- Define privacy, payment, cancellation, refund, support, and incident-response policies. Review dependency advisories, deployed headers, RLS behavior, and Electron packaging, and obtain an independent security review.
+
+Do not submit passwords, tokens, personal information, or private conversations to public issues. Report code-level security concerns through a private repository channel with a minimal, non-sensitive reproduction.

@@ -4,17 +4,23 @@ import { db } from './db';
 import { AppError } from './errors';
 import type { Hub, User } from './types';
 import { getAura } from './market';
+import { addRemoteHubRoom, createRemoteHub, joinRemoteHub, joinRemoteInvite, leaveRemoteHub, removeRemoteHubRoom } from './cloud';
 
 const liveHubs = (d: ReturnType<typeof db.get>, id: string) => Object.values(d.hubs).filter((h) => !!h.members[id]);
 
-export function makeHub(input: { userId: string; name: string; about: string; emoji: string; public: boolean }): Hub {
+export function makeHub(input: { userId: string; name: string; about: string; emoji: string; public: boolean }): Hub | Promise<Hub> {
   const name = input.name.trim().replace(/\s+/g, ' ');
   const about = input.about.trim();
   if (name.length < 2 || name.length > LIMITS.hubName) throw new AppError('err.hubName');
   if (about.length > LIMITS.hubAbout) throw new AppError('err.hubAbout');
-  const tier = db.get().users[input.userId] ? getAura(db.get().users[input.userId])?.tier : undefined;
+  const person = db.get().users[input.userId];
+  const tier = person ? getAura(person)?.tier : undefined;
   const max = tier ? AURA[tier].hubs : FREE.hubs;
-  if (liveHubs(db.get(), input.userId).length >= max) throw new AppError('createHubLimit');
+  const ownedHubCount = person?.serverBacked
+    ? Object.values(db.get().hubs).filter((hub) => hub.remote && hub.ownerId === input.userId).length
+    : liveHubs(db.get(), input.userId).length;
+  if (ownedHubCount >= max) throw new AppError('createHubLimit');
+  if (person?.serverBacked) return createRemoteHub({ userId: input.userId, name, about, emoji: input.emoji.slice(0, 4), hue: hueOf(name), isPublic: input.public });
   const id = `h_${uid(14)}`;
   const room = { id: `${id}_general`, name: 'general', kind: 'text' as const, topic: '' };
   const hub: Hub = {
@@ -37,7 +43,9 @@ export function makeHub(input: { userId: string; name: string; about: string; em
   return hub;
 }
 
-export function joinHub(hubId: string, userId: string): void {
+export function joinHub(hubId: string, userId: string): void | Promise<void> {
+  const existing = db.get().hubs[hubId];
+  if (existing?.remote) return joinRemoteHub(userId, hubId);
   db.transaction((d) => {
     const hub = d.hubs[hubId];
     if (!hub || !hub.public) throw new AppError('err.notMember');
@@ -45,9 +53,9 @@ export function joinHub(hubId: string, userId: string): void {
   });
 }
 
-export function joinInvite(invite: string, userId: string): Hub | null {
+export function joinInvite(invite: string, userId: string): Hub | null | Promise<Hub | null> {
   const hub = Object.values(db.get().hubs).find((h) => h.invite === invite);
-  if (!hub) return null;
+  if (!hub) return db.get().users[userId]?.serverBacked ? joinRemoteInvite(userId, invite) : null;
   db.transaction((d) => {
     const found = d.hubs[hub.id];
     if (found) found.members[userId] ??= 'member';
@@ -55,7 +63,8 @@ export function joinInvite(invite: string, userId: string): Hub | null {
   return hub;
 }
 
-export function leaveHub(hubId: string, userId: string): void {
+export function leaveHub(hubId: string, userId: string): void | Promise<void> {
+  if (db.get().hubs[hubId]?.remote) return leaveRemoteHub(userId, hubId);
   db.transaction((d) => {
     const hub = d.hubs[hubId];
     if (!hub?.members[userId]) return;
@@ -64,9 +73,10 @@ export function leaveHub(hubId: string, userId: string): void {
   });
 }
 
-export function addRoom(hubId: string, userId: string, rawName: string): string {
+export function addRoom(hubId: string, userId: string, rawName: string): string | Promise<string> {
   const name = rawName.trim().replace(/\s+/g, '-').toLowerCase();
   if (!/^[a-z0-9_-]{2,24}$/.test(name)) throw new AppError('err.roomName');
+  if (db.get().hubs[hubId]?.remote) return addRemoteHubRoom(userId, hubId, name);
   const id = `${hubId}_r_${uid(10)}`;
   db.transaction((d) => {
     const hub = d.hubs[hubId];
@@ -78,7 +88,8 @@ export function addRoom(hubId: string, userId: string, rawName: string): string 
   return id;
 }
 
-export function removeRoom(hubId: string, roomId: string, userId: string): void {
+export function removeRoom(hubId: string, roomId: string, userId: string): void | Promise<void> {
+  if (db.get().hubs[hubId]?.remote) return removeRemoteHubRoom(userId, hubId, roomId);
   db.transaction((d) => {
     const hub = d.hubs[hubId];
     if (!hub || !['owner', 'mod'].includes(hub.members[userId])) throw new AppError('err.notMember');

@@ -29,6 +29,10 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
+      - name: Check source and tests
+        run: |
+          npm run typecheck
+          npm test
       - name: Build desktop installers
         run: npm run electron:build
       - name: Upload installers

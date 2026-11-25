@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import en from './en';
 import ru from './ru';
 import uz from './uz';
@@ -13,11 +14,11 @@ export type Key = keyof Strings;
 export function useI18n() {
   const lang = language.use();
   const dict: Strings = lang === 'ru' ? ru : lang === 'uz' ? uz : en;
-  const t = (key: string, values?: Record<string, string | number>): string => {
+  const t = useCallback((key: string, values?: Record<string, string | number>): string => {
     let value: unknown = dict;
     for (const part of key.split('.')) value = (value as Record<string, unknown>)[part];
     if (typeof value !== 'string') return key;
     return value.replace(/\{([\w]+)\}/g, (_match, name: string) => String(values?.[name] ?? `{${name}}`));
-  };
+  }, [dict]);
   return { t, lang, setLanguage: language.set };
 }

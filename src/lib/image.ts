@@ -1,12 +1,23 @@
 import { AppError } from '../data/errors';
 
 /**
- * Reads a picture, shrinks it and re-encodes it as JPEG.
- * Re-encoding also drops EXIF data such as GPS position and camera model.
+ * Reads a picture, shrinks it and re-encodes still images as JPEG.
+ * Animated GIFs can be passed through unchanged. Re-encoding still images also drops EXIF data.
  */
-export async function fileToDataUrl(file: File, maxSide: number, maxChars: number): Promise<string> {
+export async function fileToDataUrl(file: File, maxSide: number, maxChars: number, preserveGif = false): Promise<string> {
   if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new AppError('err.imgType');
   if (file.size > 12 * 1024 * 1024) throw new AppError('err.imgBig');
+  if (preserveGif && file.type === 'image/gif') {
+    if (file.size > maxChars * 0.74) throw new AppError('err.imgBig');
+    const animatedGif = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new AppError('err.imgType'));
+      reader.onerror = () => reject(new AppError('err.imgType'));
+      reader.readAsDataURL(file);
+    });
+    if (animatedGif.length > maxChars) throw new AppError('err.imgBig');
+    return animatedGif;
+  }
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file);

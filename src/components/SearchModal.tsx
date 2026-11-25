@@ -9,7 +9,7 @@ import { Modal } from './Modal';
 
 interface SearchDetail { channel?: string; query?: string }
 
-export function SearchModal({ db, user, onSelect }: { db: DB; user: User; onSelect: (channel: string) => void }) {
+export function SearchModal({ db, user, onSelect, blockedUsers = [] }: { db: DB; user: User; onSelect: (channel: string) => void; blockedUsers?: string[] }) {
   const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -38,13 +38,14 @@ export function SearchModal({ db, user, onSelect }: { db: DB; user: User; onSele
     if (!q) return [];
     const messages = Object.entries(db.msgs).flatMap(([ch, rows]) => {
       if (scope && ch !== scope) return [];
-      const allowed = parseDM(ch)?.includes(user.id) || Object.values(db.hubs).some((h) => h.members[user.id] && h.rooms.some((r) => r.id === ch));
+      const participants = parseDM(ch);
+      const allowed = (participants?.includes(user.id) && !participants.some((id) => id !== user.id && blockedUsers.includes(id))) || Object.values(db.hubs).some((h) => h.members[user.id] && h.rooms.some((r) => r.id === ch));
       if (!allowed) return [];
       return rows.filter((m) => `${m.text} ${m.sticker ?? ''}`.toLowerCase().includes(q)).map((m) => ({ kind: 'message' as const, channel: ch, message: m, person: db.users[m.by] }));
     }).sort((a, b) => b.message.ts - a.message.ts).slice(0, 12);
-    const people = Object.values(db.users).filter((p) => p.serverBacked && p.id !== user.id && `${p.name} ${p.username}`.toLowerCase().includes(q)).slice(0, 5).map((person) => ({ kind: 'person' as const, person }));
+    const people = Object.values(db.users).filter((p) => p.serverBacked && p.id !== user.id && !blockedUsers.includes(p.id) && `${p.name} ${p.username}`.toLowerCase().includes(q)).slice(0, 5).map((person) => ({ kind: 'person' as const, person }));
     return [...people, ...messages];
-  }, [db, q, scope, user.id]);
+  }, [db, q, scope, user.id, blockedUsers]);
 
   const openResult = (item: (typeof results)[number]) => {
     if (item.kind === 'person') onSelect(startDM(user.id, item.person.id));

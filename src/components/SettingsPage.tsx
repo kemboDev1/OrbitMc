@@ -8,6 +8,7 @@ import { prefs, themeMode } from '../lib/prefs';
 import { fileToDataUrl } from '../lib/image';
 import { useI18n, language } from '../i18n';
 import { installApp, installPrompt, isStandalone } from '../lib/pwa';
+import { isDesktop } from '../lib/electron';
 import { askNotify } from '../lib/notify';
 import { ACCENTS, LIMITS } from '../config';
 import { fmtDate } from '../lib/util';
@@ -100,7 +101,7 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
   return <div className="page-content settings-page">
     <div className="page-heading"><div><div className="eyebrow">{t('settingsEyebrow')}</div><h1>{t('settings')}</h1><p>{t('appearanceHint')}</p></div><div className="settings-profile-top"><Avatar user={user} size="md"/><div><b>{user.name}</b><small>@{user.username}</small></div></div></div>
     <div className="settings-layout">
-      <nav className="settings-nav"><a href="#profile"><span>01</span>{t('profile')}</a><a href="#appearance"><span>02</span>{t('appearance')}</a><a href="#preferences"><span>03</span>{t('preferences')}</a><a href="#privacy"><span>04</span>{t('privacy')}</a><a href="#data"><span>05</span>{t('dataTools')}</a><a href="#install"><span>06</span>{t('install')}</a></nav>
+      <nav className="settings-nav"><a href="#profile"><span>01</span>{t('profile')}</a><a href="#appearance"><span>02</span>{t('appearance')}</a><a href="#preferences"><span>03</span>{t('preferences')}</a><a href="#privacy"><span>04</span>{t('privacy')}</a><a href="#data"><span>05</span>{t('dataTools')}</a>{!isDesktop() && <a href="#install"><span>06</span>{t('install')}</a>}</nav>
       <div className="settings-sections">
         <section className="settings-section" id="profile"><div className="settings-section-head"><span className="section-index">01</span><div><h2>{t('profile')}</h2><p>{t('editProfile')}</p></div></div>
           <form className="profile-settings-form" onSubmit={save}>
@@ -129,7 +130,7 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
 
         <section className="settings-section" id="data"><div className="settings-section-head"><span className="section-index">05</span><div><h2>{t('dataTools')}</h2><p>{t('storage')}: {storageText}</p></div></div><div className="data-actions"><div className="data-action-row"><span className="data-action-icon"><Icon name="download" size={17}/></span><div><b>{t('exportData')}</b><p>{t('privacyDemo')}</p></div><button className="btn btn-outline btn-small" onClick={exportBackup}>{t('exportData')}</button></div><div className="data-action-row"><span className="data-action-icon"><Icon name="upload" size={17}/></span><div><b>{t('importData')}</b><p>{t('backupError')}</p></div><input hidden ref={importRef} type="file" accept=".json,application/json" onChange={importBackup}/><button className="btn btn-outline btn-small" onClick={() => importRef.current?.click()}>{t('importData')}</button></div><div className="data-action-row reset-row"><span className="data-action-icon"><Icon name="trash" size={17}/></span><div><b>{t('wipeData')}</b><p>{t('resetSub')}</p></div><button className="btn btn-danger-outline btn-small" onClick={() => setResetOpen(true)}>{t('wipeData')}</button></div></div></section>
 
-        <section className="settings-section install-section" id="install"><div className="settings-section-head"><span className="section-index">06</span><div><h2>{t('install')}</h2><p>{t('installSub')}</p></div></div><div className="install-card"><div className="install-logo"><span>S</span></div><div className="install-copy"><b>{isStandalone() ? t('installReady') : t('brand')}</b><p>{t('downloadApp')}</p><small>{t('installSub')}</small></div><button className="btn btn-primary btn-small" onClick={openInstall} disabled={isStandalone()}>{isStandalone() ? t('installReady') : t(promptAvailable ? 'installAction' : 'install')}</button></div></section>
+        {!isDesktop() && <section className="settings-section install-section" id="install"><div className="settings-section-head"><span className="section-index">06</span><div><h2>{t('install')}</h2><p>{t('installSub')}</p></div></div><div className="install-card"><div className="install-logo"><span>S</span></div><div className="install-copy"><b>{isStandalone() ? t('installReady') : t('brand')}</b><p>{t('downloadApp')}</p><small>{t('installSub')}</small></div><button className="btn btn-primary btn-small" onClick={openInstall} disabled={isStandalone()}>{isStandalone() ? t('installReady') : t(promptAvailable ? 'installAction' : 'install')}</button></div></section>}
 
         <div className="signout-line"><span>@{user.username}</span><button className="btn btn-ghost" onClick={async () => { try { await signOut(); onSignedOut(); } catch (e) { tell(e instanceof AppError ? t(e.key) : t('err.generic'), 'bad'); } }}><Icon name="back" size={15}/>{t('signOut')}</button></div>
       </div>

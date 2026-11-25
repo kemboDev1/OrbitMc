@@ -7,7 +7,7 @@ import type { DB, User } from './types';
 const record = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown, max = 10_000): v is string => typeof v === 'string' && v.length <= max;
 const idKey = (v: string) => /^[a-z0-9:_-]{1,100}$/i.test(v);
-const image = (v: unknown, max: number) => v === undefined || v === null || (typeof v === 'string' && v.length <= max && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(v));
+const image = (v: unknown, max: number) => v === undefined || v === null || (typeof v === 'string' && v.length <= max && /^data:image\/(?:jpeg|gif);base64,[A-Za-z0-9+/=]+$/.test(v));
 const hex = (v: unknown): v is string => typeof v === 'string' && /^#[\da-f]{6}$/i.test(v);
 
 function validDB(x: unknown): x is DB {
@@ -20,8 +20,9 @@ function validDB(x: unknown): x is DB {
   for (const [id, raw] of Object.entries(d.users)) {
     if (!idKey(id) || !record(raw)) return false;
     const u = raw as Partial<User>;
-    if (u.id !== id || !text(u.username, 32) || !/^[a-z0-9._-]{1,32}$/i.test(u.username) || !text(u.name, LIMITS.name) || u.name.length < 2 || !text(u.bio, LIMITS.bio) || typeof u.hue !== 'number' || !Number.isFinite(u.hue) || u.hue < 0 || u.hue > 360 || !['online', 'idle', 'dnd', 'offline'].includes(u.presence ?? '') || !text(u.statusText, LIMITS.status) || typeof u.createdAt !== 'number' || !Number.isFinite(u.createdAt) || typeof u.bot !== 'undefined' && typeof u.bot !== 'boolean' || typeof u.serverBacked !== 'undefined' && typeof u.serverBacked !== 'boolean' || !image(u.avatar, LIMITS.imageCharsAura) || !Array.isArray(u.inventory) || u.inventory.length > 200 || !u.inventory.every((v) => text(v, 100)) || !(u.frame === null || text(u.frame, 100)) || !(u.theme === null || text(u.theme, 100)) || !(u.stickerPack === undefined || u.stickerPack === null || text(u.stickerPack, 100)) || typeof u.ring !== 'boolean' || typeof u.sparks !== 'number' || !Number.isFinite(u.sparks) || u.sparks < 0 || u.sparks > 99_999 || typeof u.lastDaily !== 'number' || !Number.isFinite(u.lastDaily) || typeof u.lastStipend !== 'number' || !Number.isFinite(u.lastStipend) || !(u.accent === null || u.accent === undefined || hex(u.accent))) return false;
+    if (u.id !== id || !text(u.username, 32) || !/^[a-z0-9._-]{1,32}$/i.test(u.username) || !text(u.name, LIMITS.name) || u.name.length < 2 || !text(u.bio, LIMITS.bio) || typeof u.hue !== 'number' || !Number.isFinite(u.hue) || u.hue < 0 || u.hue > 360 || !['online', 'idle', 'dnd', 'offline'].includes(u.presence ?? '') || !text(u.statusText, LIMITS.status) || typeof u.createdAt !== 'number' || !Number.isFinite(u.createdAt) || typeof u.bot !== 'undefined' && typeof u.bot !== 'boolean' || typeof u.serverBacked !== 'undefined' && typeof u.serverBacked !== 'boolean' || !image(u.avatar, LIMITS.imageCharsAura) || !Array.isArray(u.inventory) || u.inventory.length > 200 || !u.inventory.every((v) => text(v, 100)) || (u.giftsReceived !== undefined && (!Array.isArray(u.giftsReceived) || u.giftsReceived.length > 200 || !u.giftsReceived.every((v) => text(v, 100)))) || !(u.frame === null || text(u.frame, 100)) || !(u.theme === null || text(u.theme, 100)) || !(u.stickerPack === undefined || u.stickerPack === null || text(u.stickerPack, 100)) || typeof u.ring !== 'boolean' || typeof u.sparks !== 'number' || !Number.isFinite(u.sparks) || u.sparks < 0 || u.sparks > 99_999 || typeof u.lastDaily !== 'number' || !Number.isFinite(u.lastDaily) || typeof u.lastStipend !== 'number' || !Number.isFinite(u.lastStipend) || !(u.accent === null || u.accent === undefined || hex(u.accent))) return false;
     if (u.auth !== undefined && (!record(u.auth) || typeof u.auth.salt !== 'string' || typeof u.auth.hash !== 'string' || u.auth.iter !== LIMITS.pbkdf2 || !/^[A-Za-z0-9+/]{20,28}={0,2}$/.test(u.auth.salt) || !/^[A-Za-z0-9+/]{40,48}={0,2}$/.test(u.auth.hash))) return false;
+    if (u.giftsReceivedCount !== undefined && (typeof u.giftsReceivedCount !== 'number' || !Number.isInteger(u.giftsReceivedCount) || u.giftsReceivedCount < 0 || u.giftsReceivedCount > 1_000_000)) return false;
     if (u.aura !== null && u.aura !== undefined) {
       if (!record(u.aura) || !['ember', 'flare', 'nova'].includes(u.aura.tier as string) || !['month', 'year'].includes(u.aura.cycle as string) || typeof u.aura.since !== 'number' || !Number.isFinite(u.aura.since) || typeof u.aura.renews !== 'number' || !Number.isFinite(u.aura.renews)) return false;
     }
@@ -38,7 +39,7 @@ function validDB(x: unknown): x is DB {
   for (const [channel, raw] of Object.entries(d.msgs)) {
     if (!idKey(channel) || !Array.isArray(raw) || raw.length > LIMITS.perChannel) return false;
     for (const msg of raw) {
-      if (!record(msg) || msg.ch !== channel || !idKey(msg.id) || !users[msg.by] || !text(msg.text, LIMITS.messageNova) || typeof msg.ts !== 'number' || !Number.isFinite(msg.ts) || typeof msg.edited !== 'undefined' && typeof msg.edited !== 'number' || typeof msg.pinned !== 'undefined' && typeof msg.pinned !== 'boolean' || typeof msg.reply !== 'undefined' && !text(msg.reply, 100) || typeof msg.sticker !== 'undefined' && !text(msg.sticker, 24) || !image(msg.image, LIMITS.imageCharsAura) || !record(msg.reactions)) return false;
+      if (!record(msg) || msg.ch !== channel || !idKey(msg.id) || !users[msg.by] || !text(msg.text, LIMITS.messageNova) || typeof msg.ts !== 'number' || !Number.isFinite(msg.ts) || typeof msg.remoteCreatedAt !== 'undefined' && (typeof msg.remoteCreatedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(msg.remoteCreatedAt) || !Number.isFinite(Date.parse(msg.remoteCreatedAt))) || typeof msg.edited !== 'undefined' && typeof msg.edited !== 'number' || typeof msg.pinned !== 'undefined' && typeof msg.pinned !== 'boolean' || typeof msg.reply !== 'undefined' && !text(msg.reply, 100) || typeof msg.sticker !== 'undefined' && !text(msg.sticker, 24) || !image(msg.image, LIMITS.imageCharsAura) || !record(msg.reactions)) return false;
       for (const reactors of Object.values(msg.reactions)) if (!Array.isArray(reactors) || reactors.length > 100 || !reactors.every((id) => typeof id === 'string' && !!users[id])) return false;
     }
   }
@@ -62,6 +63,20 @@ function validDB(x: unknown): x is DB {
  * The local store is a cache for the authenticated account and UI preferences.
  */
 export const dbStore = createStore<DB>(makeSeed(), 'sado:db', validDB);
+
+function addStudioCatalog(data: DB): boolean {
+  const starter = makeSeed();
+  let changed = false;
+  for (const [id, user] of Object.entries(starter.users)) {
+    if (!data.users[id]) { data.users[id] = user; changed = true; }
+  }
+  for (const [id, listing] of Object.entries(starter.listings)) {
+    if (!data.listings[id]) { data.listings[id] = listing; changed = true; }
+  }
+  return changed;
+}
+
+if (addStudioCatalog(dbStore.get())) dbStore.set(dbStore.get());
 
 function removeBuiltInProfiles(data: DB): boolean {
   const botIds = new Set(Object.values(data.users).filter((user) => user.bot).map((user) => user.id));

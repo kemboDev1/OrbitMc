@@ -1,8 +1,11 @@
 node_modules
 dist
 .vercel
+.env
 .DS_Store
 *.local
+release/
+.codex-build-temp/
 electron/release
 electron/win32-x64
 electron/darwin-x64

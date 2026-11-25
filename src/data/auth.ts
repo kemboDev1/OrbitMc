@@ -36,13 +36,14 @@ export function validatePassword(password: string) {
   return password;
 }
 
-function mapAuthError(message: string): AppError {
-  const lower = message.toLowerCase();
+function mapAuthError(error: { message?: string; code?: string; status?: number }): AppError {
+  const lower = `${error.code ?? ''} ${error.message ?? ''}`.toLowerCase();
   if (lower.includes('no api key') || lower.includes('api key')) return new AppError('err.supabaseConfigMissing');
-  if (lower.includes('username') && (lower.includes('duplicate') || lower.includes('unique') || lower.includes('already'))) return new AppError('err.usernameTaken');
-  if (lower.includes('already registered') || lower.includes('already exists')) return new AppError('err.emailTaken');
+  if (lower.includes('profiles_username_key') || (lower.includes('username') && (lower.includes('duplicate') || lower.includes('unique') || lower.includes('already')))) return new AppError('err.usernameTaken');
+  if (lower.includes('already registered') || lower.includes('already exists') || lower.includes('user already exists')) return new AppError('err.emailTaken');
+  if (error.status === 429 || lower.includes('over_email_send_rate_limit') || lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('429')) return new AppError('err.rateLimit');
   if (lower.includes('invalid login credentials')) return new AppError('err.signIn');
-  if (lower.includes('email not confirmed')) return new AppError('err.emailUnconfirmed');
+  if (lower.includes('email not confirmed') || lower.includes('email_not_confirmed')) return new AppError('err.emailUnconfirmed');
   return new AppError('err.backendUnavailable');
 }
 
@@ -60,21 +61,28 @@ export async function register(input: { email: string; username: string; name: s
     password: input.password,
     options: { data: { username, display_name: name }, emailRedirectTo: getAuthRedirectUrl() },
   });
-  if (error) throw mapAuthError(error.message);
+  if (error) throw mapAuthError(error);
   if (!data.user) throw new AppError('err.backendUnavailable');
+  if (!data.session && data.user.identities?.length === 0) throw new AppError('err.emailTaken');
   if (!data.session) return { user: null, isNew: true, needsEmailConfirmation: true };
 
-  const user = await fetchProfile(data.user.id);
-  await syncRemoteWorkspace(data.user.id);
-  session.start(data.user.id, data.session.access_token, data.session.expires_at);
-  return { user, isNew: true };
+  try {
+    const user = await fetchProfile(data.user.id);
+    await syncRemoteWorkspace(data.user.id);
+    session.start(data.user.id, data.session.access_token, data.session.expires_at);
+    return { user, isNew: true };
+  } catch {
+    await client.auth.signOut().catch(() => undefined);
+    session.end();
+    throw new AppError('err.accountCreatedSetupIssue');
+  }
 }
 
 export async function signIn(input: { email: string; password: string }): Promise<AuthResult> {
   const client = requireSupabase();
   const email = cleanEmail(input.email);
   const { data, error } = await client.auth.signInWithPassword({ email, password: input.password });
-  if (error) throw mapAuthError(error.message);
+  if (error) throw mapAuthError(error);
   if (!data.user || !data.session) throw new AppError('err.signIn');
 
   const user = await fetchProfile(data.user.id);
@@ -86,7 +94,7 @@ export async function signIn(input: { email: string; password: string }): Promis
 export async function restoreSession(): Promise<void> {
   const client = requireSupabase();
   const { data, error } = await client.auth.getSession();
-  if (error) throw mapAuthError(error.message);
+  if (error) throw mapAuthError(error);
   if (!data.session?.user) {
     session.end();
     return;
@@ -111,7 +119,7 @@ export async function signOut(): Promise<void> {
     }
   }
   const { error } = await client.auth.signOut();
-  if (error) throw mapAuthError(error.message);
+  if (error) throw mapAuthError(error);
   session.end();
   if (presenceUpdateFailed) throw new AppError('err.backendUnavailable');
 }
@@ -121,7 +129,7 @@ export async function resetPassword(email: string): Promise<void> {
   const normalized = cleanEmail(email);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new AppError('err.emailInvalid');
   const { error } = await client.auth.resetPasswordForEmail(normalized, { redirectTo: getAuthRedirectUrl() });
-  if (error) throw mapAuthError(error.message);
+  if (error) throw mapAuthError(error);
 }
 
 export function getCurrentUser(): User | null {

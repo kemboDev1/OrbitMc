@@ -27,6 +27,10 @@ export interface User {
   aura: AuraSub | null;
   sparks: number;
   inventory: ID[];
+  /** Local gift activity; server-backed gifts need a server ledger before public display. */
+  giftsReceived?: ID[];
+  /** Public total only; gift sender and item history stay private. */
+  giftsReceivedCount?: number;
   frame: ID | null;
   theme: ID | null;
   stickerPack?: ID | null;
@@ -57,6 +61,8 @@ export interface Hub {
   public: boolean;
   invite: string;
   createdAt: number;
+  /** True when the community and rooms are stored in Supabase. */
+  remote?: true;
 }
 
 export interface Message {
@@ -65,6 +71,8 @@ export interface Message {
   by: ID;
   text: string;
   ts: number;
+  /** Exact server timestamp for stable pagination; local display uses millisecond ts. */
+  remoteCreatedAt?: string;
   edited?: number;
   reply?: ID;
   reactions: Record<string, ID[]>;
@@ -94,8 +102,10 @@ export interface Listing {
   kind: ListingKind;
   name: string;
   nameRu?: string;
+  nameUz?: string;
   about: string;
   aboutRu?: string;
+  aboutUz?: string;
   price: number;
   sellerId: ID;
   sales: number;
@@ -105,6 +115,8 @@ export interface Listing {
   stickers?: string[];
   theme?: ThemeData;
   frame?: FrameData;
+  /** True when the listing is persisted and sold through Supabase. */
+  remote?: true;
 }
 
 export interface DB {

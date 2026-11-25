@@ -3,15 +3,17 @@ import { uid } from '../lib/util';
 import { db } from './db';
 import { AppError } from './errors';
 import type { AuraTier, Listing, ListingKind, ThemeData, FrameData, User } from './types';
+import { claimRemoteDaily, createRemoteListing, purchaseRemoteListing, removeRemoteListing } from './cloud';
 
 export function getAura(user: User) {
-  const sub = user.aura;
+  const sub = user.serverBacked ? null : user.aura;
   return sub && Math.abs(sub.renews) > Date.now() ? sub : null;
 }
 
-export function claimDaily(userId: string): number {
+export function claimDaily(userId: string): number | Promise<number> {
   const current = db.get().users[userId];
   if (!current) throw new AppError('err.notMember');
+  if (current.serverBacked) return claimRemoteDaily(userId);
   const day = new Date().toDateString();
   if (new Date(current.lastDaily).toDateString() === day) throw new AppError('dailyDone');
   const activeAura = getAura(current);
@@ -24,7 +26,13 @@ export function claimDaily(userId: string): number {
   return count;
 }
 
-export function buyListing(userId: string, listingId: string): void {
+export function buyListing(userId: string, listingId: string): void | Promise<void> {
+  const remoteUser = db.get().users[userId]?.serverBacked;
+  const remoteListing = db.get().listings[listingId]?.remote;
+  if (remoteUser) {
+    if (!remoteListing) throw new AppError('shopNotReady');
+    return purchaseRemoteListing(userId, listingId);
+  }
   db.transaction((d) => {
     const user = d.users[userId];
     const listing = d.listings[listingId];
@@ -59,7 +67,11 @@ export function equipListing(userId: string, listingId: string): void {
   });
 }
 
-export function giftListing(fromId: string, toId: string, listingId: string): void {
+export function giftListing(fromId: string, toId: string, listingId: string): void | Promise<void> {
+  if (db.get().users[fromId]?.serverBacked) {
+    if (!db.get().listings[listingId]?.remote) throw new AppError('shopNotReady');
+    return purchaseRemoteListing(fromId, listingId, toId);
+  }
   db.transaction((d) => {
     const from = d.users[fromId];
     const to = d.users[toId];
@@ -70,6 +82,7 @@ export function giftListing(fromId: string, toId: string, listingId: string): vo
     if (from.sparks < item.price) throw new AppError('notEnough');
     from.sparks -= item.price;
     to.inventory.push(listingId);
+    to.giftsReceived = [...(to.giftsReceived ?? []), listingId].slice(-200);
     item.sales += 1;
     const seller = d.users[item.sellerId];
     if (seller && seller.id !== from.id) {
@@ -83,7 +96,7 @@ export function giftListing(fromId: string, toId: string, listingId: string): vo
 export function createListing(input: {
   userId: string; kind: ListingKind; name: string; about: string; price: number;
   stickers?: string[]; theme?: ThemeData; frame?: FrameData; auraOnly?: boolean;
-}): Listing {
+}): Listing | Promise<Listing> {
   const name = input.name.trim().slice(0, LIMITS.hubName);
   const about = input.about.trim().slice(0, LIMITS.hubAbout);
   const person = db.get().users[input.userId];
@@ -96,6 +109,12 @@ export function createListing(input: {
   if (input.kind === 'stickers' && (!input.stickers || input.stickers.length < 6 || input.stickers.length > 12)) throw new AppError('err.stickerCount');
   if (input.kind === 'theme' && (!input.theme || !/^#[\da-f]{6}$/i.test(input.theme.accent))) throw new AppError('err.badText');
   if (input.kind === 'frame' && (!input.frame?.colors.every((x) => /^#[\da-f]{6}$/i.test(x)) || !getAura(person))) throw new AppError('auraLimit');
+  if (person.serverBacked) {
+    return createRemoteListing({
+      userId: input.userId, kind: input.kind, name, about, price: input.price,
+      design: input.kind === 'theme' ? { ...input.theme! } : { ...input.frame!, auraOnly: input.auraOnly === true },
+    });
+  }
   const listing: Listing = {
     id: `l_${uid(16)}`, kind: input.kind, name, about, price: input.price,
     sellerId: input.userId, sales: 0, createdAt: Date.now(), auraOnly: input.auraOnly,
@@ -107,7 +126,11 @@ export function createListing(input: {
   return listing;
 }
 
-export function removeListing(userId: string, listingId: string): void {
+export function removeListing(userId: string, listingId: string): void | Promise<void> {
+  if (db.get().users[userId]?.serverBacked) {
+    if (!db.get().listings[listingId]?.remote) throw new AppError('shopNotReady');
+    return removeRemoteListing(userId, listingId);
+  }
   db.transaction((d) => {
     const l = d.listings[listingId];
     if (!l || l.sellerId !== userId) throw new AppError('err.notMember');
@@ -119,6 +142,7 @@ export function subscribeAura(userId: string, tier: AuraTier, cycle: 'month' | '
   db.transaction((d) => {
     const current = d.users[userId];
     if (!current) throw new AppError('err.notMember');
+    if (current.serverBacked) throw new AppError('subscriptionUnavailable');
     const days = cycle === 'month' ? 30 : 365;
     current.aura = { tier, cycle, since: Date.now(), renews: Date.now() + days * 86_400_000 };
   });
@@ -133,6 +157,6 @@ export function cancelAura(userId: string): void {
 }
 
 export function hasAura(userId: string): boolean {
-  const a = db.get().users[userId]?.aura;
-  return !!a && Math.abs(a.renews) > Date.now();
+  const user = db.get().users[userId];
+  return !!user && !!getAura(user);
 }
