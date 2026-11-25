@@ -166,7 +166,7 @@ export default function App() {
     '--accent': activeAccent, '--accent-ink': activeAccent ? inkFor(activeAccent) : undefined,
     '--theme-bg': marketTheme?.bg, '--theme-panel': marketTheme?.panel,
     '--theme-raised': marketTheme?.raised, '--theme-border': marketTheme?.line, '--theme-accent': marketTheme?.accent,
-    '--theme-gradient': marketTheme?.gradient,
+    '--theme-gradient': marketTheme?.image && activeAccent ? `linear-gradient(135deg, color-mix(in srgb, ${activeAccent} 42%, transparent), transparent)` : marketTheme?.gradient, '--theme-image': marketTheme?.image ? `url(\"${marketTheme.image}\")` : undefined,
   } as React.CSSProperties;
   const title = t(view);
 

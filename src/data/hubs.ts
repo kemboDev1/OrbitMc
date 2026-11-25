@@ -4,7 +4,7 @@ import { db } from './db';
 import { AppError } from './errors';
 import type { Hub, User } from './types';
 import { getAura } from './market';
-import { addRemoteHubRoom, createRemoteHub, joinRemoteHub, joinRemoteInvite, leaveRemoteHub, removeRemoteHubMember, removeRemoteHubRoom, updateRemoteHubMember } from './cloud';
+import { addRemoteHubRoom, createRemoteHub, joinRemoteHub, joinRemoteInvite, leaveRemoteHub, removeRemoteHubMember, removeRemoteHubRoom, updateRemoteHubDetails, updateRemoteHubMember, updateRemoteHubRoom } from './cloud';
 
 const liveHubs = (d: ReturnType<typeof db.get>, id: string) => Object.values(d.hubs).filter((h) => !!h.members[id]);
 
@@ -110,6 +110,27 @@ export async function setHubMemberRole(hubId: string, ownerId: string, targetId:
   if (!hub || hub.ownerId !== ownerId || targetId === ownerId || !hub.members[targetId]) throw new AppError('err.notMember');
   if (hub.remote) return updateRemoteHubMember(ownerId, hubId, targetId, role);
   db.transaction((state) => { state.hubs[hubId].members[targetId] = role; });
+}
+
+export async function updateHubDetails(hubId: string, ownerId: string, details: { name: string; about: string; emoji: string; hue: number; isPublic: boolean }): Promise<void> {
+  const hub = db.get().hubs[hubId];
+  const name = details.name.trim().replace(/\s+/g, ' ');
+  const about = details.about.trim();
+  const emoji = details.emoji.trim().slice(0, 4);
+  if (!hub || hub.ownerId !== ownerId) throw new AppError('err.notMember');
+  if (name.length < 2 || name.length > LIMITS.hubName) throw new AppError('err.hubName');
+  if (about.length > LIMITS.hubAbout || !emoji || !Number.isInteger(details.hue) || details.hue < 0 || details.hue > 360) throw new AppError('err.badText');
+  if (hub.remote) return updateRemoteHubDetails(ownerId, hubId, { ...details, name, about, emoji });
+  db.transaction((state) => { const target = state.hubs[hubId]; target.name = name; target.about = about; target.emoji = emoji; target.hue = details.hue; target.public = details.isPublic; });
+}
+
+export async function updateHubRoom(hubId: string, userId: string, roomId: string, details: { topic: string; kind: 'text' | 'broadcast' }): Promise<void> {
+  const hub = db.get().hubs[hubId];
+  const room = hub?.rooms.find((item) => item.id === roomId);
+  const topic = details.topic.trim();
+  if (!hub || hub.ownerId !== userId || !room || topic.length > 120 || !['text', 'broadcast'].includes(details.kind)) throw new AppError('err.notMember');
+  if (hub.remote) return updateRemoteHubRoom(userId, hubId, roomId, { topic, kind: details.kind });
+  db.transaction((state) => { const target = state.hubs[hubId].rooms.find((item) => item.id === roomId)!; target.topic = topic; target.kind = details.kind; });
 }
 
 export async function removeHubMember(hubId: string, ownerId: string, targetId: string): Promise<void> {

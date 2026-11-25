@@ -47,6 +47,9 @@ function isRemoteHubChannel(channel: string, userId: string): boolean {
 
 export function sendMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string }): Message | Promise<Message> {
   if (!hasAccess(input.channel, input.userId)) throw new AppError('err.notMember');
+  const hub = Object.values(db.get().hubs).find((item) => item.rooms.some((room) => room.id === input.channel));
+  const room = hub?.rooms.find((item) => item.id === input.channel);
+  if (room?.kind === 'broadcast' && !['owner', 'mod'].includes(hub?.members[input.userId] ?? '')) throw new AppError('err.notMember');
   const text = input.text.replace(/\r\n?/g, '\n').trim();
   const user = db.get().users[input.userId];
   if (!user) throw new AppError('err.notMember');

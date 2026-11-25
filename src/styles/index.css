@@ -140,7 +140,7 @@ kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; 
 .side-local-note { display: flex; align-items: flex-start; gap: 7px; padding: 10px 14px 12px; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: 9px; line-height: 1.5; }
 .local-indicator, .live-dot { width: 6px; height: 6px; flex: 0 0 6px; margin-top: 3px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px color-mix(in srgb, var(--success) 38%, transparent); }
 
-.main-area { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; background: var(--theme-bg, var(--bg)); background-image: var(--theme-gradient, none); }
+.main-area { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; background: var(--theme-bg, var(--bg)); background-image: var(--theme-gradient, none), var(--theme-image, none); }
 .topbar { z-index: 9; display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 25px; border-bottom: 1px solid var(--theme-border, var(--line)); background: var(--theme-panel, var(--bg)); }
 .topbar-title { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .topbar-location { color: var(--faint); font: 9px 'JetBrains Mono', monospace; letter-spacing: .08em; text-transform: uppercase; }
@@ -1102,3 +1102,23 @@ button, a { transition-duration: .18s; }
 .profile-tag-list span { padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 8px; }
 .profile-template-halo > .avatar-wrap { box-shadow: 0 0 0 2px var(--profile-stroke, var(--accent)), 0 0 22px color-mix(in srgb, var(--profile-stroke, var(--accent)) 55%, transparent); }
 .profile-template-frame { border-radius: 12px; outline: 1px solid color-mix(in srgb, var(--profile-stroke, var(--accent)) 55%, var(--line)); outline-offset: 5px; }
+
+/* Shop bundles and creator artwork */
+.theme-preview { position: relative; overflow: hidden; background-image: linear-gradient(135deg, color-mix(in srgb, var(--preview-accent) 40%, transparent), transparent), var(--design-image, none), var(--preview-gradient, var(--preview-bg)); background-size: cover; background-position: center; }
+.bundle-preview .preview-window { transform: translateX(-16px); }
+.bundle-frame-mini { position: absolute; right: 9px; bottom: 25px; display: grid; place-items: center; width: 37px; height: 37px; border: 2px solid var(--frame-a); border-radius: 50%; background: linear-gradient(135deg,var(--frame-a),var(--frame-b)); color: white; font-size: 21px; box-shadow: 0 0 18px color-mix(in srgb,var(--frame-a) 50%,transparent);  }
+.image-upload-card { display:flex; align-items:center; flex-wrap:wrap; gap:9px; padding:10px; border:1px dashed var(--line); border-radius:10px; background:color-mix(in srgb,var(--accent) 3%,var(--bg)); }
+.image-upload-card img { width:100%; max-height:150px; border-radius:8px; object-fit:cover; }
+.image-upload-card small { color:var(--danger); }
+.creator-kinds { grid-template-columns:repeat(3,minmax(0,1fr)); }
+@media (prefers-reduced-motion: no-preference) { .product-card { animation: view-arrive .42s both; animation-delay:calc(var(--product-order,0) * 35ms); } .bundle-frame-mini { animation: bundle-float 3s ease-in-out infinite; } .creator-kind { transition:transform .2s ease, border-color .2s ease, background .2s ease; } .creator-kind:hover { transform:translateY(-2px); } }
+
+.hub-settings-form { max-height: min(70vh, 760px); overflow-y:auto; padding-right: 3px; }
+.hub-settings-row { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+.hub-room-settings { display:grid; gap:8px; padding-top:10px; border-top:1px solid var(--line-soft); }
+.hub-room-settings h3 { margin:0; font-size:12px; }
+.hub-room-setting { display:grid; grid-template-columns: 1fr 1.5fr 1.3fr auto; align-items:center; gap:7px; padding:8px; border:1px solid var(--line); border-radius:9px; background:var(--bg); }
+.hub-room-setting b { overflow:hidden; text-overflow:ellipsis; font:10px 'JetBrains Mono',monospace; }
+@media (max-width:640px) { .hub-settings-row { grid-template-columns:1fr; gap:8px; } .hub-room-setting { grid-template-columns:1fr 1fr; } .hub-room-setting b { grid-column:1 / -1; } }
+
+@keyframes bundle-float { 0%,100% { transform:translateY(0) rotate(-4deg); } 50% { transform:translateY(-5px) rotate(4deg); } }

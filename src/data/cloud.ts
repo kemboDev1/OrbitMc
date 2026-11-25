@@ -67,6 +67,11 @@ type MarketSnapshot = {
 
 function mapMarketListing(row: MarketRow, previous?: Listing): Listing {
   const design = row.design ?? {};
+  const bundleTheme = row.kind === 'bundle' ? (design.theme as Record<string, unknown> | undefined) : undefined;
+  const bundleFrame = row.kind === 'bundle' ? (design.frame as Record<string, unknown> | undefined) : undefined;
+  const theme = (row.kind === 'bundle' ? bundleTheme : row.kind === 'theme' ? design : undefined) as unknown as ThemeData | undefined;
+  const imagePath = typeof theme?.image === 'string' ? theme.image : typeof design.imagePath === 'string' ? design.imagePath : undefined;
+  const image = imagePath?.startsWith('data:image/') ? imagePath : imagePath ? requireSupabase().storage.from('market-assets').getPublicUrl(imagePath).data.publicUrl : undefined;
   return {
     ...previous,
     id: row.id,
@@ -79,8 +84,8 @@ function mapMarketListing(row: MarketRow, previous?: Listing): Listing {
     createdAt: new Date(row.created_at).getTime(),
     auraOnly: design.auraOnly === true,
     removed: !row.active,
-    theme: row.kind === 'theme' ? design as unknown as ThemeData : undefined,
-    frame: row.kind === 'frame' ? design as unknown as FrameData : undefined,
+    theme: theme ? { ...theme, image } : undefined,
+    frame: row.kind === 'frame' ? design as unknown as FrameData : bundleFrame as unknown as FrameData | undefined,
     remote: true,
   };
 }
@@ -121,8 +126,17 @@ export async function syncRemoteMarket(userId: string): Promise<void> {
 
 export async function createRemoteListing(input: { userId: string; kind: ListingKind; name: string; about: string; price: number; design: Record<string, unknown> }): Promise<Listing> {
   const client = requireSupabase();
+  const design = structuredClone(input.design);
+  const theme = (input.kind === 'bundle' ? design.theme : design) as Record<string, unknown> | undefined;
+  if (typeof theme?.image === 'string' && theme.image.startsWith('data:image/jpeg;base64,')) {
+    const imagePath = `${input.userId}/${crypto.randomUUID()}.jpg`;
+    const bytes = Uint8Array.from(atob(theme.image.slice('data:image/jpeg;base64,'.length)), (char) => char.charCodeAt(0));
+    const { error: uploadError } = await client.storage.from('market-assets').upload(imagePath, bytes, { contentType: 'image/jpeg', upsert: false, cacheControl: '31536000' });
+    if (uploadError) throw new AppError('shopUnavailable');
+    theme.image = imagePath;
+  }
   const { data, error } = await client.rpc('create_market_listing', {
-    item_kind: input.kind, item_name: input.name, item_about: input.about, item_price: input.price, item_design: input.design,
+    item_kind: input.kind, item_name: input.name, item_about: input.about, item_price: input.price, item_design: design,
   });
   if (error || typeof data !== 'string') throw mapMarketError(error);
   await syncRemoteMarket(input.userId);
@@ -331,6 +345,20 @@ export async function addRemoteHubRoom(userId: string, hubId: string, name: stri
   if (error || typeof data !== 'string') throw mapHubError(error, 'err.roomName');
   await syncRemoteHubs(userId);
   return data;
+}
+
+export async function updateRemoteHubDetails(userId: string, hubId: string, details: { name: string; about: string; emoji: string; hue: number; isPublic: boolean }): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc('update_hub_details', { target_hub_id: hubId, next_name: details.name, next_about: details.about, next_emoji: details.emoji, next_hue: details.hue, next_public: details.isPublic });
+  if (error) throw mapHubError(error, 'err.notMember');
+  await syncRemoteHubs(userId);
+}
+
+export async function updateRemoteHubRoom(userId: string, hubId: string, roomId: string, details: { topic: string; kind: 'text' | 'broadcast' }): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc('update_hub_room_settings', { target_hub_id: hubId, target_room_id: roomId, next_topic: details.topic, next_kind: details.kind });
+  if (error) throw mapHubError(error, 'err.notMember');
+  await syncRemoteHubs(userId);
 }
 
 export async function updateRemoteHubMember(userId: string, hubId: string, targetUserId: string, role: Role): Promise<void> {

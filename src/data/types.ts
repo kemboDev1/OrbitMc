@@ -87,7 +87,7 @@ export interface Message {
   image?: string;
 }
 
-export type ListingKind = 'stickers' | 'theme' | 'frame';
+export type ListingKind = 'stickers' | 'theme' | 'frame' | 'bundle';
 
 export interface ThemeData {
   dark: boolean;
@@ -97,6 +97,7 @@ export interface ThemeData {
   line: string;
   accent: string;
   gradient?: string;
+  image?: string;
 }
 
 export interface FrameData {

@@ -9,6 +9,8 @@ const text = (v: unknown, max = 10_000): v is string => typeof v === 'string' &&
 const idKey = (v: string) => /^[a-z0-9:_-]{1,100}$/i.test(v);
 const image = (v: unknown, max: number) => v === undefined || v === null || (typeof v === 'string' && v.length <= max && /^data:image\/(?:jpeg|gif);base64,[A-Za-z0-9+/=]+$/.test(v));
 const hex = (v: unknown): v is string => typeof v === 'string' && /^#[\da-f]{6}$/i.test(v);
+const listingImage = (v: unknown) => v === undefined || (typeof v === 'string' && v.length <= LIMITS.imageCharsAura && (/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(v) || /^https:\/\/[a-z0-9-]+\.supabase\.(?:co|in)\/storage\/v1\/object\/public\/market-assets\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.jpg$/i.test(v)));
+const listingGradient = (v: unknown) => v === undefined || (typeof v === 'string' && /^linear-gradient\(\d{1,3}deg, #[\da-f]{6}(?: \d{1,3}%)?(?:, #[\da-f]{6}(?: \d{1,3}%)?){1,4}\)$/i.test(v));
 
 function validDB(x: unknown): x is DB {
   if (!record(x)) return false;
@@ -47,9 +49,9 @@ function validDB(x: unknown): x is DB {
   for (const [id, raw] of Object.entries(d.listings)) {
     if (!idKey(id) || !record(raw)) return false;
     const l = raw as DB['listings'][string];
-    if (l.id !== id || !['stickers', 'theme', 'frame'].includes(l.kind) || !text(l.name, LIMITS.hubName) || l.name.length < 1 || !text(l.about, LIMITS.hubAbout) || typeof l.price !== 'number' || !Number.isInteger(l.price) || l.price < 10 || l.price > 9999 || !users[l.sellerId] || typeof l.sales !== 'number' || !Number.isFinite(l.sales) || l.sales < 0 || typeof l.createdAt !== 'number' || !Number.isFinite(l.createdAt) || typeof l.removed !== 'undefined' && typeof l.removed !== 'boolean') return false;
+    if (l.id !== id || !['stickers', 'theme', 'frame', 'bundle'].includes(l.kind) || !text(l.name, LIMITS.hubName) || l.name.length < 1 || !text(l.about, LIMITS.hubAbout) || typeof l.price !== 'number' || !Number.isInteger(l.price) || l.price < 10 || l.price > 9999 || !users[l.sellerId] || typeof l.sales !== 'number' || !Number.isFinite(l.sales) || l.sales < 0 || typeof l.createdAt !== 'number' || !Number.isFinite(l.createdAt) || typeof l.removed !== 'undefined' && typeof l.removed !== 'boolean') return false;
     if (l.stickers !== undefined && (!Array.isArray(l.stickers) || l.stickers.length < 1 || l.stickers.length > 12 || !l.stickers.every((v) => text(v, 24)))) return false;
-    if (l.theme !== undefined && (!record(l.theme) || typeof l.theme.dark !== 'boolean' || !hex(l.theme.bg) || !hex(l.theme.panel) || !hex(l.theme.raised) || !hex(l.theme.line) || !hex(l.theme.accent))) return false;
+    if (l.theme !== undefined && (!record(l.theme) || typeof l.theme.dark !== 'boolean' || !hex(l.theme.bg) || !hex(l.theme.panel) || !hex(l.theme.raised) || !hex(l.theme.line) || !hex(l.theme.accent) || !listingImage(l.theme.image) || !listingGradient(l.theme.gradient))) return false;
     if (l.frame !== undefined && (!record(l.frame) || typeof l.frame.spin !== 'boolean' || !Array.isArray(l.frame.colors) || l.frame.colors.length < 1 || l.frame.colors.length > 5 || !l.frame.colors.every(hex))) return false;
   }
 

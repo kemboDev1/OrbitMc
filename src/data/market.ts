@@ -59,6 +59,11 @@ export function equipListing(userId: string, listingId: string): void {
     if (!user || !user.inventory.includes(listingId)) throw new AppError('err.notMember');
     const item = d.listings[listingId];
     if (!item) throw new AppError('err.notMember');
+    if (item.kind === 'bundle') {
+      const isEquipped = user.theme === listingId && user.frame === listingId;
+      user.theme = isEquipped ? null : listingId;
+      user.frame = isEquipped ? null : listingId;
+    }
     if (item.kind === 'theme') user.theme = user.theme === listingId ? null : listingId;
     if (item.kind === 'stickers') user.stickerPack = user.stickerPack === listingId ? null : listingId;
     if (item.kind === 'frame') {
@@ -108,12 +113,13 @@ export function createListing(input: {
   const userListings = Object.values(db.get().listings).filter((x) => x.sellerId === input.userId && !x.removed).length;
   if (userListings >= LIMITS.listings) throw new AppError('listingLimit');
   if (input.kind === 'stickers' && (!input.stickers || input.stickers.length < 6 || input.stickers.length > 12)) throw new AppError('err.stickerCount');
-  if (input.kind === 'theme' && (!input.theme || !/^#[\da-f]{6}$/i.test(input.theme.accent))) throw new AppError('err.badText');
+  if ((input.kind === 'theme' || input.kind === 'bundle') && (!input.theme || !/^#[\da-f]{6}$/i.test(input.theme.accent))) throw new AppError('err.badText');
   if (input.kind === 'frame' && (!input.frame?.colors.every((x) => /^#[\da-f]{6}$/i.test(x)) || !getAura(person))) throw new AppError('auraLimit');
+  if (input.kind === 'bundle' && !input.frame?.colors.every((x) => /^#[\da-f]{6}$/i.test(x))) throw new AppError('err.badText');
   if (person.serverBacked) {
     return createRemoteListing({
       userId: input.userId, kind: input.kind, name, about, price: input.price,
-      design: input.kind === 'theme' ? { ...input.theme! } : { ...input.frame!, auraOnly: input.auraOnly === true },
+      design: input.kind === 'theme' ? { ...input.theme! } : input.kind === 'bundle' ? { theme: { ...input.theme! }, frame: { ...input.frame! } } : { ...input.frame!, auraOnly: input.auraOnly === true },
     });
   }
   const listing: Listing = {
