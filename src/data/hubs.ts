@@ -4,7 +4,7 @@ import { db } from './db';
 import { AppError } from './errors';
 import type { Hub, User } from './types';
 import { getAura } from './market';
-import { addRemoteHubRoom, createRemoteHub, joinRemoteHub, joinRemoteInvite, leaveRemoteHub, removeRemoteHubRoom } from './cloud';
+import { addRemoteHubRoom, createRemoteHub, joinRemoteHub, joinRemoteInvite, leaveRemoteHub, removeRemoteHubMember, removeRemoteHubRoom, updateRemoteHubMember } from './cloud';
 
 const liveHubs = (d: ReturnType<typeof db.get>, id: string) => Object.values(d.hubs).filter((h) => !!h.members[id]);
 
@@ -15,7 +15,7 @@ export function makeHub(input: { userId: string; name: string; about: string; em
   if (about.length > LIMITS.hubAbout) throw new AppError('err.hubAbout');
   const person = db.get().users[input.userId];
   const tier = person ? getAura(person)?.tier : undefined;
-  const max = tier ? AURA[tier].hubs : FREE.hubs;
+  const max = person?.isOwner ? Number.POSITIVE_INFINITY : tier ? AURA[tier].hubs : FREE.hubs;
   const ownedHubCount = person?.serverBacked
     ? Object.values(db.get().hubs).filter((hub) => hub.remote && hub.ownerId === input.userId).length
     : liveHubs(db.get(), input.userId).length;
@@ -103,4 +103,18 @@ export function membersOf(hubId: string): User[] {
   const d = db.get();
   const hub = d.hubs[hubId];
   return hub ? Object.keys(hub.members).map((id) => d.users[id]).filter(Boolean) : [];
+}
+
+export async function setHubMemberRole(hubId: string, ownerId: string, targetId: string, role: 'member' | 'mod'): Promise<void> {
+  const hub = db.get().hubs[hubId];
+  if (!hub || hub.ownerId !== ownerId || targetId === ownerId || !hub.members[targetId]) throw new AppError('err.notMember');
+  if (hub.remote) return updateRemoteHubMember(ownerId, hubId, targetId, role);
+  db.transaction((state) => { state.hubs[hubId].members[targetId] = role; });
+}
+
+export async function removeHubMember(hubId: string, ownerId: string, targetId: string): Promise<void> {
+  const hub = db.get().hubs[hubId];
+  if (!hub || hub.ownerId !== ownerId || targetId === ownerId || !hub.members[targetId]) throw new AppError('err.notMember');
+  if (hub.remote) return removeRemoteHubMember(ownerId, hubId, targetId);
+  db.transaction((state) => { delete state.hubs[hubId].members[targetId]; });
 }

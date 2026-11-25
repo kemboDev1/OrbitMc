@@ -2,10 +2,13 @@ import { createStore } from '../lib/store';
 
 interface LocalChatControls {
   muted: string[];
+  mutedUntil?: Record<string, number>;
   blocked: string[];
   remoteBlocked?: string[];
   clearedAt: Record<string, number>;
   hiddenMessages: Record<string, string[]>;
+  deletedChats?: string[];
+  chatThemes?: Record<string, 'default' | 'ember' | 'ocean' | 'moss' | 'violet'>;
 }
 
 type ControlState = Record<string, LocalChatControls>;
@@ -16,26 +19,34 @@ const validState = (value: unknown): value is ControlState => {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return false;
     const item = entry as Partial<LocalChatControls>;
     return Array.isArray(item.muted) && item.muted.every((id) => typeof id === 'string' && id.length <= 100)
+      && (item.mutedUntil === undefined || typeof item.mutedUntil === 'object' && item.mutedUntil !== null && !Array.isArray(item.mutedUntil) && Object.values(item.mutedUntil).every((at) => typeof at === 'number' && Number.isFinite(at)))
       && Array.isArray(item.blocked) && item.blocked.every((id) => typeof id === 'string' && id.length <= 100)
       && (item.remoteBlocked === undefined || Array.isArray(item.remoteBlocked) && item.remoteBlocked.every((id) => typeof id === 'string' && id.length <= 100))
       && typeof item.clearedAt === 'object' && item.clearedAt !== null && !Array.isArray(item.clearedAt)
       && Object.entries(item.clearedAt).every(([id, at]) => id.length <= 100 && typeof at === 'number' && Number.isFinite(at))
       && typeof item.hiddenMessages === 'object' && item.hiddenMessages !== null && !Array.isArray(item.hiddenMessages)
-      && Object.entries(item.hiddenMessages).every(([channel, ids]) => channel.length <= 100 && Array.isArray(ids) && ids.length <= 4000 && ids.every((id) => typeof id === 'string' && id.length <= 100));
+      && Object.entries(item.hiddenMessages).every(([channel, ids]) => channel.length <= 100 && Array.isArray(ids) && ids.length <= 4000 && ids.every((id) => typeof id === 'string' && id.length <= 100))
+      && (item.deletedChats === undefined || Array.isArray(item.deletedChats) && item.deletedChats.every((id) => typeof id === 'string' && id.length <= 100))
+      && (item.chatThemes === undefined || typeof item.chatThemes === 'object' && item.chatThemes !== null && !Array.isArray(item.chatThemes) && Object.entries(item.chatThemes).every(([channel, theme]) => channel.length <= 100 && ['default', 'ember', 'ocean', 'moss', 'violet'].includes(theme as string)));
   });
 };
 
 const controls = createStore<ControlState>({}, 'orbitmc:chat-controls', validState);
 
 function forUser(userId: string): LocalChatControls {
-  return controls.get()[userId] ?? { muted: [], blocked: [], remoteBlocked: [], clearedAt: {}, hiddenMessages: {} };
+  return controls.get()[userId] ?? { muted: [], mutedUntil: {}, blocked: [], remoteBlocked: [], clearedAt: {}, hiddenMessages: {}, deletedChats: [], chatThemes: {} };
 }
 
 function update(userId: string, change: (current: LocalChatControls) => LocalChatControls): void {
   controls.set((state) => ({ ...state, [userId]: change(forUser(userId)) }));
 }
 
-export const isMuted = (userId: string, otherId: string) => forUser(userId).muted.includes(otherId);
+export const isMuted = (userId: string, otherId: string) => {
+  const current = forUser(userId);
+  return current.muted.includes(otherId) && (!(current.mutedUntil?.[otherId]) || current.mutedUntil[otherId] > Date.now());
+};
+export const isChatDeleted = (userId: string, channel: string) => forUser(userId).deletedChats?.includes(channel) ?? false;
+export const getChatTheme = (userId: string, channel: string) => forUser(userId).chatThemes?.[channel] ?? 'default';
 export const isBlocked = (userId: string, otherId: string) => {
   const current = forUser(userId);
   return current.blocked.includes(otherId) || (current.remoteBlocked ?? []).includes(otherId);
@@ -46,14 +57,33 @@ export const isMessageHidden = (userId: string, channel: string, messageId: stri
 export function useChatControls(userId: string): LocalChatControls {
   controls.use();
   const current = forUser(userId);
-  return { ...current, blocked: [...new Set([...current.blocked, ...(current.remoteBlocked ?? [])])] };
+  return { ...current, muted: current.muted.filter((id) => !current.mutedUntil?.[id] || current.mutedUntil[id] > Date.now()), blocked: [...new Set([...current.blocked, ...(current.remoteBlocked ?? [])])] };
 }
 
-export function setMuted(userId: string, otherId: string, muted: boolean): void {
-  update(userId, (current) => ({
-    ...current,
-    muted: muted ? [...new Set([...current.muted, otherId])] : current.muted.filter((id) => id !== otherId),
-  }));
+export function setMuted(userId: string, otherId: string, muted: boolean, durationMs?: number): void {
+  update(userId, (current) => {
+    const mutedUntil = { ...(current.mutedUntil ?? {}) };
+    if (muted && durationMs) mutedUntil[otherId] = Date.now() + durationMs;
+    else delete mutedUntil[otherId];
+    return { ...current, muted: muted ? [...new Set([...current.muted, otherId])] : current.muted.filter((id) => id !== otherId), mutedUntil };
+  });
+}
+
+export function deleteChatForUser(userId: string, channel: string): void {
+  update(userId, (current) => ({ ...current, deletedChats: [...new Set([...(current.deletedChats ?? []), channel])].slice(-500) }));
+}
+
+export function restoreChatForUser(userId: string, channel: string): void {
+  update(userId, (current) => ({ ...current, deletedChats: (current.deletedChats ?? []).filter((id) => id !== channel) }));
+}
+
+export function setChatTheme(userId: string, channel: string, theme: NonNullable<LocalChatControls['chatThemes']>[string]): void {
+  update(userId, (current) => {
+    const chatThemes = { ...(current.chatThemes ?? {}) };
+    if (theme === 'default') delete chatThemes[channel];
+    else chatThemes[channel] = theme;
+    return { ...current, chatThemes };
+  });
 }
 
 export function setBlocked(userId: string, otherId: string, blocked: boolean): void {

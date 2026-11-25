@@ -2,7 +2,7 @@ import { db } from './db';
 import type { FrameData, Hub, Message, Presence, Role, Room, ThemeData, User } from './types';
 import { requireSupabase } from '../lib/supabase';
 import { AppError } from './errors';
-import { replaceRemoteBlocks, setRemoteBlocked } from './chatControls';
+import { replaceRemoteBlocks, restoreChatForUser, setRemoteBlocked } from './chatControls';
 import type { Listing, ListingKind } from './types';
 
 interface ProfileRow {
@@ -12,6 +12,8 @@ interface ProfileRow {
   bio: string;
   hue: number;
   avatar: string | null;
+  banner?: string | null;
+  profile_stroke?: string | null;
   presence: Presence;
   status_text: string;
   created_at: string;
@@ -158,6 +160,8 @@ function toUser(row: ProfileRow, previous?: User): User {
     bio: row.bio,
     hue: row.hue,
     avatar: row.avatar ?? undefined,
+    banner: row.banner ?? undefined,
+    profileStroke: row.profile_stroke ?? undefined,
     presence: row.presence,
     statusText: row.status_text,
     createdAt: new Date(row.created_at).getTime(),
@@ -207,6 +211,7 @@ function cacheRemoteDirectMessage(row: DirectMessageRow): void {
       if (!state.dms[participant].includes(message.ch)) state.dms[participant].unshift(message.ch);
     }
   });
+  for (const participant of [row.sender_id, row.recipient_id]) restoreChatForUser(participant, message.ch);
 }
 
 function removeCachedDirectMessage(messageId: string): void {
@@ -322,6 +327,21 @@ export async function addRemoteHubRoom(userId: string, hubId: string, name: stri
   if (error || typeof data !== 'string') throw mapHubError(error, 'err.roomName');
   await syncRemoteHubs(userId);
   return data;
+}
+
+export async function updateRemoteHubMember(userId: string, hubId: string, targetUserId: string, role: Role): Promise<void> {
+  if (!['member', 'mod'].includes(role)) throw new AppError('err.notMember');
+  const client = requireSupabase();
+  const { error } = await client.rpc('set_hub_member_role', { target_hub_id: hubId, target_user_id: targetUserId, next_role: role });
+  if (error) throw mapHubError(error, 'err.notMember');
+  await syncRemoteHubs(userId);
+}
+
+export async function removeRemoteHubMember(userId: string, hubId: string, targetUserId: string): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc('remove_hub_member', { target_hub_id: hubId, target_user_id: targetUserId });
+  if (error) throw mapHubError(error, 'err.notMember');
+  await syncRemoteHubs(userId);
 }
 
 export async function removeRemoteHubRoom(userId: string, hubId: string, roomId: string): Promise<void> {
@@ -491,12 +511,14 @@ export function subscribeRemoteWorkspace(userId: string, onError: (error: Error)
   return () => { void client.removeChannel(channel); };
 }
 
-export async function updateRemoteProfile(userId: string, values: { name?: string; bio?: string; avatar?: string | null; presence?: Presence; statusText?: string }) {
+export async function updateRemoteProfile(userId: string, values: { name?: string; bio?: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; presence?: Presence; statusText?: string }) {
   const client = requireSupabase();
   const update: Record<string, unknown> = {};
   if (values.name !== undefined) update.display_name = values.name;
   if (values.bio !== undefined) update.bio = values.bio;
   if (values.avatar !== undefined) update.avatar = values.avatar;
+  if (values.banner !== undefined) update.banner = values.banner;
+  if (values.profileStroke !== undefined) update.profile_stroke = values.profileStroke;
   if (values.presence !== undefined) update.presence = values.presence;
   if (values.statusText !== undefined) update.status_text = values.statusText;
   const { data, error } = await client.from('profiles').update(update).eq('id', userId).select('*').single();

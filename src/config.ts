@@ -30,7 +30,7 @@ export const AURA: Record<AuraTier, { month: number; year: number; stipend: numb
   nova: { month: 9.99, year: 99.9, stipend: 1200, daily: 4, hubs: 100, fee: 0 },
 };
 
-export const FREE = { hubs: 3, fee: 0.15, daily: 25, startSparks: 300 };
+export const FREE = { hubs: 10, fee: 0.15, daily: 25, startSparks: 300 };
 
 export const ACCENTS = ['#ff5b2e', '#37d39b', '#8f7dff', '#3aa8ff', '#ffc233', '#ff4d7e'];
 

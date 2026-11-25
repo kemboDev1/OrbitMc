@@ -15,6 +15,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [name, setName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [password, setPassword] = useState('');
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -33,7 +34,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
     setBusy(true);
     try {
       const result = mode === 'signup'
-        ? await register({ email, username, name, password })
+        ? await register({ email, username, name, password, birthDate: birthDate || undefined })
         : await signIn({ email, password });
       if (result.needsEmailConfirmation) {
         setNotice(t('authEmailConfirmation'));
@@ -106,6 +107,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
             <label className="field-label">{t('email')}<input className="field-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></label>
             {mode === 'signup' && <label className="field-label">{t('displayName')}<input className="field-input" autoComplete="name" maxLength={32} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('displayNamePlaceholder')} required /></label>}
             {mode === 'signup' && <label className="field-label">{t('username')}<span className="input-prefix-wrap"><span className="input-prefix">@</span><input className="field-input prefix-field" autoComplete="username" maxLength={20} minLength={4} value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))} placeholder="yourname" required /></span><span className="field-hint">{t('usernameHint')}</span></label>}
+            {mode === 'signup' && <label className="field-label">{t('birthDate')}<input className="field-input" type="date" autoComplete="bday" value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setBirthDate(e.target.value)}/><span className="field-hint">{t('birthDatePrivate')}</span></label>}
             <label className="field-label">{t('password')}<span className="password-field-wrap"><input className="field-input" type={visible ? 'text' : 'password'} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('passwordHint')} required /><button className="password-eye" type="button" aria-label={visible ? t('hide') : t('show')} onClick={() => setVisible((v) => !v)}><Icon name={visible ? 'eyeOff' : 'eye'} size={17}/></button></span>
               {mode === 'signup' && <span className={`strength-meter strength-${score}`}><span className="strength-track"><i/><i/><i/><i/></span><span>{t(`strength${score}`)}</span></span>}
             </label>

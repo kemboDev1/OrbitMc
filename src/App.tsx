@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import type { DB, Hub, User } from './data/types';
 import { db } from './data/db';
 import { session } from './data/session';
@@ -19,17 +19,21 @@ import { BrandMark } from './components/AuthScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { LandingPage } from './components/LandingPage';
 import { ChatScreen } from './components/ChatScreen';
-import { HubPage, CreateHubModal, PeoplePage } from './components/HubPages';
-import { BazaarPage } from './components/BazaarPage';
-import { AuraPage } from './components/AuraPage';
-import { SettingsPage } from './components/SettingsPage';
+const HubPage = lazy(() => import('./components/HubPages').then((module) => ({ default: module.HubPage })));
+const CreateHubModal = lazy(() => import('./components/HubPages').then((module) => ({ default: module.CreateHubModal })));
+const PeoplePage = lazy(() => import('./components/HubPages').then((module) => ({ default: module.PeoplePage })));
+const BazaarPage = lazy(() => import('./components/BazaarPage').then((module) => ({ default: module.BazaarPage })));
+const AuraPage = lazy(() => import('./components/AuraPage').then((module) => ({ default: module.AuraPage })));
+const SettingsPage = lazy(() => import('./components/SettingsPage').then((module) => ({ default: module.SettingsPage })));
 import { SearchModal } from './components/SearchModal';
 import { Modal } from './components/Modal';
 import { ToastHost, tell } from './components/Toast';
 import { isDesktop } from './lib/electron';
-import { useChatControls } from './data/chatControls';
+import { isChatDeleted, useChatControls } from './data/chatControls';
+import { getBirthdayUserIds, isOrbitOwner } from './data/admin';
+const AdminPage = lazy(() => import('./components/AdminPage').then((module) => ({ default: module.AdminPage })));
 
-export type View = 'chats' | 'hubs' | 'bazaar' | 'aura' | 'people' | 'settings';
+export type View = 'chats' | 'hubs' | 'bazaar' | 'aura' | 'people' | 'settings' | 'admin';
 const navItems: { key: View; icon: IconName }[] = [
   { key: 'chats', icon: 'chat' }, { key: 'hubs', icon: 'grid' }, { key: 'bazaar', icon: 'market' }, { key: 'aura', icon: 'spark' }, { key: 'people', icon: 'people' },
 ];
@@ -56,6 +60,8 @@ export default function App() {
   const [presenceBusy, setPresenceBusy] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [restoreError, setRestoreError] = useState('');
+  const [ownerAccess, setOwnerAccess] = useState(false);
+  const [birthdayPeople, setBirthdayPeople] = useState<string[]>([]);
 
   useEffect(() => { registerServiceWorker(); }, []);
   useEffect(() => {
@@ -65,6 +71,24 @@ export default function App() {
     }).finally(() => { if (active) setAuthReady(true); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!user?.serverBacked) { setOwnerAccess(false); return; }
+    let active = true;
+    void isOrbitOwner().then((owner) => {
+      if (!active) return;
+      setOwnerAccess(owner);
+      db.transaction((state) => { const current = state.users[user.id]; if (current) current.isOwner = owner; });
+    }).catch(() => { if (active) setOwnerAccess(false); });
+    return () => { active = false; };
+  }, [user?.id, user?.serverBacked]);
+
+  useEffect(() => {
+    if (!user?.serverBacked) { setBirthdayPeople([]); return; }
+    let active = true;
+    void getBirthdayUserIds().then((ids) => { if (active) setBirthdayPeople(ids); }).catch(() => { if (active) setBirthdayPeople([]); });
+    return () => { active = false; };
+  }, [user?.id, user?.serverBacked]);
 
   useEffect(() => {
     if (!user?.serverBacked) return;
@@ -131,7 +155,7 @@ export default function App() {
     const last = messages.at(-1);
     const unseen = last && last.by !== user?.id && last.ts > (data.reads[user?.id ?? '']?.[id] ?? 0);
     return { id, person, last, unseen };
-  }).filter((x) => !!x.person && !chatControls.blocked.includes(x.person.id)).sort((a, b) => (b.last?.ts ?? 0) - (a.last?.ts ?? 0)), [data.dms, data.msgs, data.reads, data.users, user?.id, chatControls.blocked]);
+  }).filter((x) => !!x.person && !chatControls.blocked.includes(x.person.id) && !isChatDeleted(user?.id ?? '', x.id)).sort((a, b) => (b.last?.ts ?? 0) - (a.last?.ts ?? 0)), [data.dms, data.msgs, data.reads, data.users, user?.id, chatControls.blocked, chatControls.deletedChats]);
   const joinedHubs = useMemo(() => Object.values(data.hubs).filter((h) => !!h.members[user?.id ?? '']), [data.hubs, user?.id]);
   const direct = channel?.startsWith('dm:') ?? false;
   const marketTheme = user?.theme ? data.listings[user.theme]?.theme : undefined;
@@ -142,6 +166,7 @@ export default function App() {
     '--accent': activeAccent, '--accent-ink': activeAccent ? inkFor(activeAccent) : undefined,
     '--theme-bg': marketTheme?.bg, '--theme-panel': marketTheme?.panel,
     '--theme-raised': marketTheme?.raised, '--theme-border': marketTheme?.line, '--theme-accent': marketTheme?.accent,
+    '--theme-gradient': marketTheme?.gradient,
   } as React.CSSProperties;
   const title = t(view);
 
@@ -212,26 +237,30 @@ export default function App() {
 
     <main className="main-area">
       <div className="view-stage" key={view}>
-        {view === 'chats' && <ChatScreen db={data} user={user} channel={channel} setChannel={setChannel} onStartChat={() => setNewChatOpen(true)} onNewHub={newHub}/>}
+        {view === 'chats' && <ChatScreen db={data} user={user} channel={channel} setChannel={setChannel} onStartChat={() => setNewChatOpen(true)} onNewHub={newHub} onDeleteConversation={() => setChannel(null)} birthdayPeople={birthdayPeople}/>}
+        <Suspense fallback={<div className="route-loading"><span className="spinner"/>{t('loading')}</div>}>
         {view === 'hubs' && <HubPage db={data} user={user} onOpen={openHub} onCreate={newHub}/>}
         {view === 'people' && <PeoplePage db={data} user={user} onChat={(id) => pickUser(data.users[id])}/>}
         {view === 'bazaar' && <BazaarPage db={data} user={user}/>}
         {view === 'aura' && <AuraPage user={user}/>}
-        {view === 'settings' && <SettingsPage user={user} onSignedOut={markSignedOut}/>}
+        {view === 'settings' && <SettingsPage user={user} onSignedOut={markSignedOut} isOwner={ownerAccess} onOpenAdmin={() => toView('admin')}/>}
+        {view === 'admin' && ownerAccess && <Suspense fallback={<div className="admin-loading"><span className="spinner"/>{t('loading')}</div>}><AdminPage onBack={() => toView('settings')}/></Suspense>}
+        {view === 'admin' && !ownerAccess && <SettingsPage user={user} onSignedOut={markSignedOut}/>}
+        </Suspense>
       </div>
       <nav className="mobile-nav" aria-label={t('brand')}>{navItems.map((item) => <button key={item.key} className={view === item.key ? 'active' : ''} aria-label={t(item.key)} onClick={() => toView(item.key)}><Icon name={item.icon} size={20}/><span>{t(item.key)}</span></button>)}<button className={view === 'settings' ? 'active' : ''} onClick={() => toView('settings')} aria-label={t('settings')}><Icon name="gear" size={19}/><span>{t('settings')}</span></button></nav>
     </main>
 
-    {profileMenu && <><button className="menu-dismiss" aria-label={t('cancel')} onClick={() => setProfileMenu(false)}/><div className="account-popover"><div className="account-popover-head"><Avatar user={user} size="md"/><span><b>{user.name}</b><small>@{user.username}</small></span><span className="account-plan">{hasAura(user.id) ? <Icon name="spark" size={12}/> : null}{hasAura(user.id) ? user.aura?.tier.toUpperCase() : t('auraFree')}</span></div><div className="status-editor"><label className="field-label">{t('setStatus')}<input className="field-input" value={statusDraft} maxLength={60} placeholder={t('statusPlaceholder')} onChange={(e) => setStatusDraft(e.target.value)}/></label><div><button className="text-action" disabled={presenceBusy} onClick={() => { void Promise.resolve(setPresence(user.id, user.presence, statusDraft)).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('applyStatus')}</button><button className="text-action" disabled={presenceBusy} onClick={() => { setStatusDraft(''); void Promise.resolve(setPresence(user.id, user.presence, '')).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('clearStatus')}</button></div></div><div className="presence-picker"><span>{t('setPresence')}</span>{(['online','idle','dnd','offline'] as User['presence'][]).map((p) => <button key={p} className={user.presence === p ? 'active' : ''} disabled={presenceBusy} onClick={() => { void changePresence(p); }}><i className={`status-mini status-${p}`}/>{t(p)}{user.presence === p && <Icon name="check" size={13}/>}</button>)}</div><div className="account-popover-links"><button onClick={() => { setProfileMenu(false); toView('settings'); }}><Icon name="gear" size={15}/>{t('settings')}</button><button onClick={() => { setProfileMenu(false); toView('aura'); }}><Icon name="spark" size={15}/>{t('aura')}</button><button className="signout-action" onClick={() => { void signOutNow(); }}><Icon name="back" size={15}/>{t('signOut')}</button></div></div></>}
+    {profileMenu && <><button className="menu-dismiss" aria-label={t('cancel')} onClick={() => setProfileMenu(false)}/><div className="account-popover"><div className="account-popover-head"><Avatar user={user} size="md"/><span><b>{user.name}</b><small>@{user.username}</small></span><span className="account-plan">{hasAura(user.id) ? <Icon name="spark" size={12}/> : null}{hasAura(user.id) ? user.aura?.tier.toUpperCase() : t('auraFree')}</span></div>{birthdayPeople.includes(user.id) && <span className="birthday-pill">🎉 {t('birthdayToday')}</span>}<div className="status-editor"><label className="field-label">{t('setStatus')}<input className="field-input" value={statusDraft} maxLength={60} placeholder={t('statusPlaceholder')} onChange={(e) => setStatusDraft(e.target.value)}/></label><div><button className="text-action" disabled={presenceBusy} onClick={() => { void Promise.resolve(setPresence(user.id, user.presence, statusDraft)).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('applyStatus')}</button><button className="text-action" disabled={presenceBusy} onClick={() => { setStatusDraft(''); void Promise.resolve(setPresence(user.id, user.presence, '')).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('clearStatus')}</button></div></div><div className="presence-picker"><span>{t('setPresence')}</span>{(['online','idle','dnd','offline'] as User['presence'][]).map((p) => <button key={p} className={user.presence === p ? 'active' : ''} disabled={presenceBusy} onClick={() => { void changePresence(p); }}><i className={`status-mini status-${p}`}/>{t(p)}{user.presence === p && <Icon name="check" size={13}/>}</button>)}</div><div className="account-popover-links"><button onClick={() => { setProfileMenu(false); toView('settings'); }}><Icon name="gear" size={15}/>{t('settings')}</button><button onClick={() => { setProfileMenu(false); toView('aura'); }}><Icon name="spark" size={15}/>{t('aura')}</button><button className="signout-action" onClick={() => { void signOutNow(); }}><Icon name="back" size={15}/>{t('signOut')}</button></div></div></>}
 
     <Modal open={newChatOpen} onClose={() => setNewChatOpen(false)} title={t('newMessage')} subtitle={t('welcomeSub')} size="sm"><div className="new-chat-list"><label className="mini-search"><Icon name="search" size={15}/><input autoFocus placeholder={t('search')} onChange={(e) => { const q = e.target.value.toLowerCase(); document.querySelectorAll<HTMLButtonElement>('.new-chat-contact').forEach((el) => { el.hidden = !el.dataset.search?.includes(q); }); }}/></label>{contacts.map((p) => <button className="new-chat-contact" data-search={`${p.name} ${p.username}`.toLowerCase()} key={p.id} onClick={() => pickUser(p)}><Avatar user={p} size="sm" showStatus/><span><b>{p.name}</b><small>@{p.username}</small></span><Icon name="arrowUpRight" size={15}/></button>)}{contacts.length === 0 && <p className="modal-demo-note">{t('noPeople')}</p>}</div></Modal>
 
-    <CreateHubModal open={newHubOpen} onClose={() => setNewHubOpen(false)} user={user} onCreated={(h) => { tell(t('hubCreated'), 'good'); openHub(h); }}/>
+    {newHubOpen && <Suspense fallback={null}><CreateHubModal open={newHubOpen} onClose={() => setNewHubOpen(false)} user={user} onCreated={(h) => { tell(t('hubCreated'), 'good'); openHub(h); }}/></Suspense>}
 
     <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title={t('invite')} subtitle={t('pasteInvite')} size="sm"><form className="stack-form" onSubmit={async (e) => { e.preventDefault(); try { const token = inviteValue.trim().split('/').filter(Boolean).at(-1) ?? ''; const h = await joinInvite(token, user.id); if (!h) throw new AppError('err.inviteInvalid'); setInviteOpen(false); setInviteValue(''); openHub(h); tell(t('hubJoined'), 'good'); } catch (e) { tell(e instanceof AppError ? t(e.key) : t('err.generic'), 'bad'); } }}><p className="modal-explainer">{t(user.serverBacked ? 'inviteLiveNotice' : 'inviteLocalNotice')}</p><label className="field-label">{t('invite')}<input autoFocus className="field-input" value={inviteValue} onChange={(e) => setInviteValue(e.target.value)} placeholder={t('invitePlaceholder')}/></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setInviteOpen(false)}>{t('cancel')}</button><button type="submit" className="btn btn-primary"><Icon name="arrowUpRight" size={14}/>{t('joinHub')}</button></div></form></Modal>
 
     <SearchModal db={data} user={user} blockedUsers={chatControls.blocked} onSelect={(id) => { setChannel(id); setView('chats'); }}/>
-    <Modal open={!!profileTarget} onClose={() => setProfileTarget(null)} title={t('profile')} subtitle={profileTarget ? `@${data.users[profileTarget]?.username ?? ''}` : ''} size="sm">{profileTarget && data.users[profileTarget] && <div className="profile-modal-card"><div className="profile-modal-cover" style={{ '--cover-hue': data.users[profileTarget].hue } as React.CSSProperties}/><Avatar user={data.users[profileTarget]} size="xl" showStatus/><h2>{data.users[profileTarget].name}{hasAura(data.users[profileTarget].id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10}/></span>}</h2><p>@{data.users[profileTarget].username}</p>{data.users[profileTarget].bio && <p>{data.users[profileTarget].bio}</p>}{data.users[profileTarget].statusText && <p className="profile-status">“{data.users[profileTarget].statusText}”</p>}{hasAura(data.users[profileTarget].id) && <span className="profile-plan"><Icon name="check" size={13}/>{t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })}</span>}<div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(data.users[profileTarget].createdAt) })}</span>{data.users[profileTarget].inventory.length > 0 && <span>{t('collectionCount', { count: data.users[profileTarget].inventory.length })}</span>}{(data.users[profileTarget].giftsReceivedCount ?? data.users[profileTarget].giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: data.users[profileTarget].giftsReceivedCount ?? data.users[profileTarget].giftsReceived?.length ?? 0 })}</span>}</div><button className="btn btn-primary btn-full" onClick={() => { pickUser(data.users[profileTarget]); setProfileTarget(null); }}><Icon name="chat" size={15}/>{t('dmFrom')}</button></div>}</Modal>
+    <Modal open={!!profileTarget} onClose={() => setProfileTarget(null)} title={t('profile')} subtitle={profileTarget ? `@${data.users[profileTarget]?.username ?? ''}` : ''} size="sm">{profileTarget && data.users[profileTarget] && <div className="profile-modal-card" style={{ '--profile-stroke': data.users[profileTarget].profileStroke } as React.CSSProperties}><div className="profile-modal-cover" style={{ '--cover-hue': data.users[profileTarget].hue, backgroundImage: data.users[profileTarget].banner ? `url(${data.users[profileTarget].banner})` : undefined } as React.CSSProperties}/><Avatar user={data.users[profileTarget]} size="xl" showStatus/><h2>{data.users[profileTarget].name}{hasAura(data.users[profileTarget].id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10}/></span>}</h2>{birthdayPeople.includes(profileTarget) && <span className="birthday-pill">🎉 {t('birthdayToday')}</span>}<p>@{data.users[profileTarget].username}</p>{data.users[profileTarget].bio && <p>{data.users[profileTarget].bio}</p>}{data.users[profileTarget].statusText && <p className="profile-status">“{data.users[profileTarget].statusText}”</p>}{hasAura(data.users[profileTarget].id) && <span className="profile-plan"><Icon name="check" size={13}/>{t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })}</span>}<div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(data.users[profileTarget].createdAt) })}</span>{data.users[profileTarget].inventory.length > 0 && <span>{t('collectionCount', { count: data.users[profileTarget].inventory.length })}</span>}{(data.users[profileTarget].giftsReceivedCount ?? data.users[profileTarget].giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: data.users[profileTarget].giftsReceivedCount ?? data.users[profileTarget].giftsReceived?.length ?? 0 })}</span>}</div><button className="btn btn-primary btn-full" onClick={() => { pickUser(data.users[profileTarget]); setProfileTarget(null); }}><Icon name="chat" size={15}/>{t('dmFrom')}</button></div>}</Modal>
     <ToastHost/>
   </div>;
 }

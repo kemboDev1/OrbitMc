@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import type { User } from '../data/types';
 import { updateAccent, updateProfile } from '../data/profile';
 import { session } from '../data/session';
@@ -17,16 +17,20 @@ import { Icon } from './Icons';
 import { Modal } from './Modal';
 import { tell } from './Toast';
 import { AppError } from '../data/errors';
+import { getBirthdayVisibility, sendFeedback, setBirthdayVisibility } from '../data/admin';
 
-export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
+export function SettingsPage({ user, onSignedOut, isOwner = false, onOpenAdmin }: { user: User; onSignedOut: () => void; isOwner?: boolean; onOpenAdmin?: () => void }) {
   const { t, lang } = useI18n();
   const pr = prefs.use();
   const currentTheme = themeMode.use();
   const avatarRef = useRef<HTMLInputElement>(null);
+  const bannerRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(user.name);
   const [bio, setBio] = useState(user.bio);
   const [avatar, setAvatar] = useState(user.avatar ?? '');
+  const [banner, setBanner] = useState(user.banner ?? '');
+  const [profileStroke, setProfileStroke] = useState(user.profileStroke ?? '#ff5b2e');
   const [saveBusy, setSaveBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -34,11 +38,24 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
   const promptAvailable = installPrompt.use();
   const [notificationBlocked, setNotificationBlocked] = useState(typeof Notification !== 'undefined' && Notification.permission === 'denied');
   const [accent, setAccent] = useState(user.accent ?? '');
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackBody, setFeedbackBody] = useState('');
+  const [feedbackCategory, setFeedbackCategory] = useState<'idea' | 'problem' | 'other'>('idea');
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
+  const [birthdayVisible, setBirthdayVisible] = useState(false);
+  const [birthdayBusy, setBirthdayBusy] = useState(false);
+
+  useEffect(() => {
+    if (!user.serverBacked) return;
+    let active = true;
+    void getBirthdayVisibility().then((visible) => { if (active) setBirthdayVisible(visible); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [user.id, user.serverBacked]);
 
   const used = useMemo(() => db.bytes(), [user, db.use]);
   const save = async (e: FormEvent) => {
     e.preventDefault(); setSaveBusy(true);
-    try { await updateProfile(user.id, { name, bio, avatar: avatar || null }); tell(t('profileSaved'), 'good'); }
+    try { await updateProfile(user.id, { name, bio, avatar: avatar || null, banner: banner || null, profileStroke: profileStroke || null }); tell(t('profileSaved'), 'good'); }
     catch (e) { tell(e instanceof AppError ? t(e.key) : t('err.saveFailed'), 'bad'); }
     finally { setSaveBusy(false); }
   };
@@ -47,6 +64,12 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
     if (!file) return;
     try { setAvatar(await fileToDataUrl(file, 560, LIMITS.imageChars)); }
     catch (e) { tell(e instanceof AppError ? t(e.key) : t('uploadAvatarError'), 'bad'); }
+  };
+  const chooseBanner = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    try { setBanner(await fileToDataUrl(file, 1280, LIMITS.imageChars, true)); }
+    catch (error) { tell(error instanceof AppError ? t(error.key) : t('uploadAvatarError'), 'bad'); }
   };
   const exportBackup = () => {
     try {
@@ -78,6 +101,21 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
       tell(e instanceof AppError ? t(e.key) : t('err.generic'), 'bad');
     }
   };
+  const submitFeedback = async (event: FormEvent) => {
+    event.preventDefault();
+    if (feedbackBody.trim().length < 8 || feedbackBusy) return;
+    setFeedbackBusy(true);
+    try { await sendFeedback(feedbackCategory, feedbackBody); setFeedbackBody(''); setFeedbackOpen(false); tell(t('feedbackSent'), 'good'); }
+    catch (error) { tell(error instanceof AppError ? t(error.key) : t('err.saveFailed'), 'bad'); }
+    finally { setFeedbackBusy(false); }
+  };
+  const toggleBirthdayVisible = async () => {
+    if (birthdayBusy) return;
+    const next = !birthdayVisible; setBirthdayBusy(true);
+    try { await setBirthdayVisibility(next); setBirthdayVisible(next); tell(t('profileSaved'), 'good'); }
+    catch (error) { tell(error instanceof AppError ? t(error.key) : t('err.saveFailed'), 'bad'); }
+    finally { setBirthdayBusy(false); }
+  };
   const setA = (value: string) => {
     setAccent(value);
     try { updateAccent(user.id, value || null); }
@@ -106,6 +144,7 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
         <section className="settings-section" id="profile"><div className="settings-section-head"><span className="section-index">01</span><div><h2>{t('profile')}</h2><p>{t('editProfile')}</p></div></div>
           <form className="profile-settings-form" onSubmit={save}>
             <div className="avatar-editor"><Avatar user={{ ...user, name, avatar: avatar || undefined }} size="xl"/><div><strong>{t('avatar')}</strong><p>{t('avatarHelp')}</p><div className="avatar-actions"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden ref={avatarRef} onChange={chooseAvatar}/><button type="button" className="btn btn-outline btn-small" onClick={() => avatarRef.current?.click()}><Icon name="upload" size={14}/>{t('changeAvatar')}</button>{avatar && <button type="button" className="btn btn-ghost btn-small" onClick={() => setAvatar('')}>{t('removeAvatar')}</button>}</div></div></div>
+            <div className="profile-banner-editor"><input hidden ref={bannerRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseBanner}/><div className="profile-banner-preview" style={{ backgroundImage: banner ? `url(${banner})` : undefined }}><span>{t('profileBanner')}</span></div><div className="avatar-actions"><button type="button" className="btn btn-outline btn-small" onClick={() => bannerRef.current?.click()}><Icon name="image" size={14}/>{t('profileBanner')}</button>{banner && <button type="button" className="btn btn-ghost btn-small" onClick={() => setBanner('')}>{t('removeBanner')}</button>}<label className="profile-stroke-picker">{t('profileStroke')}<input type="color" value={profileStroke} onChange={(event) => setProfileStroke(event.target.value)}/></label></div></div>
             <div className="profile-fields"><label className="field-label">{t('profileName')}<input className="field-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.name}/></label><div className="field-label">{t('username')}<span className="field-input field-readonly">@{user.username}<Icon name="lock" size={14}/></span></div><label className="field-label">{t('profileBio')}<textarea className="field-input field-textarea" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} placeholder={t('bioPlaceholder')}/><small className="field-counter">{bio.length}/{LIMITS.bio}</small></label></div>
             <div className="profile-form-actions"><span>{t('memberSince', { date: fmtDate(user.createdAt, lang) })}</span><button className="btn btn-primary btn-small" disabled={saveBusy}>{saveBusy ? t('loading') : t('saveProfile')}</button></div>
           </form>
@@ -126,15 +165,16 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
           <ToggleRow title={t('memberToggle')} subtitle={t('members')} value={pr.members} onChange={(v) => prefs.set({ members: v })}/>
         </section>
 
-        <section className="settings-section privacy-section" id="privacy"><div className="settings-section-head"><span className="section-index">04</span><div><h2>{t('privacy')}</h2><p>{t('privacyHeading')}</p></div></div><div className="privacy-notice"><span className="privacy-icon"><Icon name="shield" size={18}/></span><div><b>{t('privacyHeading')}</b><p>{t('privacyDemo')}</p><p>{t('privacyAuth')}</p></div></div><div className="privacy-warning"><Icon name="info" size={16}/><p>{t('privacyWarning')}</p></div><div className="future-note"><span className="eyebrow">{t('launchLabel')}</span><p>{t('privacyLive')}</p></div></section>
+        <section className="settings-section privacy-section" id="privacy"><div className="settings-section-head"><span className="section-index">04</span><div><h2>{t('privacy')}</h2><p>{t('privacyHeading')}</p></div></div><div className="privacy-notice"><span className="privacy-icon"><Icon name="shield" size={18}/></span><div><b>{t('privacyHeading')}</b><p>{t('privacyDemo')}</p><p>{t('privacyAuth')}</p></div></div>{user.serverBacked && <ToggleRow title={t('birthdayShow')} subtitle={t('birthdayPrivacy')} value={birthdayVisible} onChange={() => void toggleBirthdayVisible()}/>}<div className="privacy-warning"><Icon name="info" size={16}/><p>{t('privacyWarning')}</p></div><div className="future-note"><span className="eyebrow">{t('launchLabel')}</span><p>{t('privacyLive')}</p></div></section>
 
-        <section className="settings-section" id="data"><div className="settings-section-head"><span className="section-index">05</span><div><h2>{t('dataTools')}</h2><p>{t('storage')}: {storageText}</p></div></div><div className="data-actions"><div className="data-action-row"><span className="data-action-icon"><Icon name="download" size={17}/></span><div><b>{t('exportData')}</b><p>{t('privacyDemo')}</p></div><button className="btn btn-outline btn-small" onClick={exportBackup}>{t('exportData')}</button></div><div className="data-action-row"><span className="data-action-icon"><Icon name="upload" size={17}/></span><div><b>{t('importData')}</b><p>{t('backupError')}</p></div><input hidden ref={importRef} type="file" accept=".json,application/json" onChange={importBackup}/><button className="btn btn-outline btn-small" onClick={() => importRef.current?.click()}>{t('importData')}</button></div><div className="data-action-row reset-row"><span className="data-action-icon"><Icon name="trash" size={17}/></span><div><b>{t('wipeData')}</b><p>{t('resetSub')}</p></div><button className="btn btn-danger-outline btn-small" onClick={() => setResetOpen(true)}>{t('wipeData')}</button></div></div></section>
+        <section className="settings-section" id="data"><div className="settings-section-head"><span className="section-index">05</span><div><h2>{t('dataTools')}</h2><p>{t('storage')}: {storageText}</p></div></div><div className="data-actions">{user.serverBacked && <div className="data-action-row"><span className="data-action-icon"><Icon name="chat" size={17}/></span><div><b>{t('feedback')}</b><p>{t('feedbackPrivacy')}</p></div><button className="btn btn-outline btn-small" onClick={() => setFeedbackOpen(true)}>{t('feedback')}</button></div>}{isOwner && onOpenAdmin && <div className="data-action-row"><span className="data-action-icon"><Icon name="shield" size={17}/></span><div><b>{t('adminTitle')}</b><p>{t('adminPrivacy')}</p></div><button className="btn btn-outline btn-small" onClick={onOpenAdmin}>{t('adminTitle')}</button></div>}<div className="data-action-row"><span className="data-action-icon"><Icon name="download" size={17}/></span><div><b>{t('exportData')}</b><p>{t('privacyDemo')}</p></div><button className="btn btn-outline btn-small" onClick={exportBackup}>{t('exportData')}</button></div><div className="data-action-row"><span className="data-action-icon"><Icon name="upload" size={17}/></span><div><b>{t('importData')}</b><p>{t('backupError')}</p></div><input hidden ref={importRef} type="file" accept=".json,application/json" onChange={importBackup}/><button className="btn btn-outline btn-small" onClick={() => importRef.current?.click()}>{t('importData')}</button></div><div className="data-action-row reset-row"><span className="data-action-icon"><Icon name="trash" size={17}/></span><div><b>{t('wipeData')}</b><p>{t('resetSub')}</p></div><button className="btn btn-danger-outline btn-small" onClick={() => setResetOpen(true)}>{t('wipeData')}</button></div></div></section>
 
         {!isDesktop() && <section className="settings-section install-section" id="install"><div className="settings-section-head"><span className="section-index">06</span><div><h2>{t('install')}</h2><p>{t('installSub')}</p></div></div><div className="install-card"><div className="install-logo"><span>S</span></div><div className="install-copy"><b>{isStandalone() ? t('installReady') : t('brand')}</b><p>{t('downloadApp')}</p><small>{t('installSub')}</small></div><button className="btn btn-primary btn-small" onClick={openInstall} disabled={isStandalone()}>{isStandalone() ? t('installReady') : t(promptAvailable ? 'installAction' : 'install')}</button></div></section>}
 
         <div className="signout-line"><span>@{user.username}</span><button className="btn btn-ghost" onClick={async () => { try { await signOut(); onSignedOut(); } catch (e) { tell(e instanceof AppError ? t(e.key) : t('err.generic'), 'bad'); } }}><Icon name="back" size={15}/>{t('signOut')}</button></div>
       </div>
     </div>
+    <Modal open={feedbackOpen} onClose={() => !feedbackBusy && setFeedbackOpen(false)} title={t('feedbackTitle')} subtitle={t('feedbackHint')} size="sm"><form className="stack-form" onSubmit={submitFeedback}><label className="field-label">{t('feedback')}<select className="field-input" value={feedbackCategory} onChange={(event) => setFeedbackCategory(event.target.value as typeof feedbackCategory)}><option value="idea">{t('feedbackIdea')}</option><option value="problem">{t('feedbackProblem')}</option><option value="other">{t('feedbackOther')}</option></select></label><label className="field-label"><textarea className="field-input field-textarea" minLength={8} maxLength={2000} required value={feedbackBody} onChange={(event) => setFeedbackBody(event.target.value)} placeholder={t('feedbackHint')}/><small className="field-counter">{feedbackBody.length}/2000</small></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setFeedbackOpen(false)} disabled={feedbackBusy}>{t('cancel')}</button><button className="btn btn-primary" disabled={feedbackBusy || feedbackBody.trim().length < 8}>{feedbackBusy ? t('loading') : t('feedbackSend')}</button></div></form></Modal>
     <Modal open={resetOpen} onClose={() => setResetOpen(false)} title={t('resetConfirm')} subtitle={t('resetSub')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setResetOpen(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={wipe}>{t('wipeData')}</button></div></Modal>
     <Modal open={installOpen} onClose={() => setInstallOpen(false)} title={t('install')} subtitle={t('chooseDevice')} size="sm"><div className="install-choices">{(['ios','android','computer'] as const).map((d) => <button key={d} className={device === d ? 'selected' : ''} onClick={() => setDevice(d)}><Icon name={d === 'computer' ? 'monitor' : 'download'} size={18}/>{t(d === 'ios' ? 'desktopIOS' : d === 'android' ? 'desktopAndroid' : 'desktopComputer')}</button>)}</div><div className="install-instructions"><Icon name="info" size={16}/><p>{deviceSteps}</p></div><p className="install-footnote">{t('downloadApp')}</p><button className="btn btn-secondary btn-full" onClick={() => setInstallOpen(false)}>{t('backToApp')}</button></Modal>
   </div>;

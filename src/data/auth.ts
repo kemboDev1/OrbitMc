@@ -47,19 +47,20 @@ function mapAuthError(error: { message?: string; code?: string; status?: number 
   return new AppError('err.backendUnavailable');
 }
 
-export async function register(input: { email: string; username: string; name: string; password: string }): Promise<AuthResult> {
+export async function register(input: { email: string; username: string; name: string; password: string; birthDate?: string }): Promise<AuthResult> {
   const email = cleanEmail(input.email);
   const username = cleanUsername(input.username);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError('err.emailInvalid');
   if (!usernameOK(username)) throw new AppError('err.username');
   const name = validateName(input.name);
   validatePassword(input.password);
+  if (input.birthDate && (!/^\d{4}-\d{2}-\d{2}$/.test(input.birthDate) || Number.isNaN(Date.parse(`${input.birthDate}T00:00:00Z`)) || input.birthDate > new Date().toISOString().slice(0, 10))) throw new AppError('err.badText');
 
   const client = requireSupabase();
   const { data, error } = await client.auth.signUp({
     email,
     password: input.password,
-    options: { data: { username, display_name: name }, emailRedirectTo: getAuthRedirectUrl() },
+    options: { data: { username, display_name: name, ...(input.birthDate ? { birth_date: input.birthDate } : {}) }, emailRedirectTo: getAuthRedirectUrl() },
   });
   if (error) throw mapAuthError(error);
   if (!data.user) throw new AppError('err.backendUnavailable');

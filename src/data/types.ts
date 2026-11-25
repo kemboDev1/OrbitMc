@@ -18,12 +18,16 @@ export interface User {
   bio: string;
   hue: number;
   avatar?: string;
+  banner?: string;
+  profileStroke?: string;
   presence: Presence;
   statusText: string;
   createdAt: number;
   /** Built-in demo contact that answers on its own. */
   bot?: boolean;
   serverBacked?: boolean;
+  /** Set only after the server confirms the protected OrbitMc owner role. */
+  isOwner?: boolean;
   aura: AuraSub | null;
   sparks: number;
   inventory: ID[];
@@ -90,6 +94,7 @@ export interface ThemeData {
   raised: string;
   line: string;
   accent: string;
+  gradient?: string;
 }
 
 export interface FrameData {

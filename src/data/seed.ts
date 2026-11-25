@@ -29,6 +29,24 @@ export function makeSeed(): DB {
       price: 170, sellerId: studioId, sales: 0, createdAt: 1795540000000,
       theme: { dark: true, bg: '#121815', panel: '#1B241F', raised: '#26312A', line: '#39463D', accent: '#B6CA84' },
     },
+    orbit_theme_tidalglass: {
+      id: 'orbit_theme_tidalglass', kind: 'theme' as const, name: 'Tidal glass', nameRu: 'Приливное стекло', nameUz: 'Dengiz oynasi',
+      about: 'Cold sea-glass tones with a bright current of cyan.', aboutRu: 'Холодные морские оттенки с яркой бирюзовой волной.', aboutUz: 'Sovuq dengiz tuslari va yorqin moviy jilva.',
+      price: 190, sellerId: studioId, sales: 0, createdAt: 1795540000000,
+      theme: { dark: true, bg: '#101a21', panel: '#182a33', raised: '#213a45', line: '#36535e', accent: '#69d7dc', gradient: 'linear-gradient(155deg, #10242e 0%, #172a34 48%, #263b46 100%)' },
+    },
+    orbit_theme_orchidstatic: {
+      id: 'orbit_theme_orchidstatic', kind: 'theme' as const, name: 'Orchid static', nameRu: 'Статика орхидеи', nameUz: 'Orxideya',
+      about: 'A soft plum gradient with lilac signals.', aboutRu: 'Мягкий сливовый градиент и сиреневые акценты.', aboutUz: 'Mayin olxo‘ri tusli gradient va binafsha urg‘ular.',
+      price: 210, sellerId: studioId, sales: 0, createdAt: 1795540000000,
+      theme: { dark: true, bg: '#191522', panel: '#241d31', raised: '#302740', line: '#4b3d60', accent: '#c29cf4', gradient: 'linear-gradient(145deg, #21192d 0%, #312139 50%, #241c36 100%)' },
+    },
+    orbit_theme_claylight: {
+      id: 'orbit_theme_claylight', kind: 'theme' as const, name: 'Claylight', nameRu: 'Глиняный свет', nameUz: 'Loy shu’lasi',
+      about: 'Sunlit clay, pale cream and a persimmon accent.', aboutRu: 'Солнечная глина, кремовый фон и хурмовый акцент.', aboutUz: 'Quyosh tekkan loy, qaymoqrang fon va xurmo tusli urg‘u.',
+      price: 180, sellerId: studioId, sales: 0, createdAt: 1795540000000,
+      theme: { dark: false, bg: '#f4eee5', panel: '#fbf7ef', raised: '#e9ddd0', line: '#d8c7b6', accent: '#bf603f', gradient: 'linear-gradient(145deg, #f2e4d6 0%, #f7f0e7 52%, #ead9cb 100%)' },
+    },
     orbit_frame_arc: {
       id: 'orbit_frame_arc', kind: 'frame' as const, name: 'Arc frame', nameRu: 'Рамка «Дуга»', nameUz: 'Yoy rom',
       about: 'A clean two-tone orbit around your portrait.', aboutRu: 'Чистая двухцветная орбита вокруг портрета.', aboutUz: 'Portret atrofida ikki rangli saranjom halqa.',

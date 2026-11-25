@@ -6,7 +6,7 @@ import { validateBio, validateName } from './auth';
 import type { Presence } from './types';
 import { updateRemoteProfile } from './cloud';
 
-export async function updateProfile(userId: string, input: { name: string; bio: string; avatar?: string | null }): Promise<void> {
+export async function updateProfile(userId: string, input: { name: string; bio: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null }): Promise<void> {
   const name = validateName(input.name);
   const bio = validateBio(input.bio);
   const currentUser = db.get().users[userId];
@@ -14,8 +14,10 @@ export async function updateProfile(userId: string, input: { name: string; bio: 
   if (input.avatar !== undefined && input.avatar !== null && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.avatar) || input.avatar.length > LIMITS.imageChars)) {
     throw new AppError('err.imgBig');
   }
+  for (const image of [input.banner]) if (image !== undefined && image !== null && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image) || image.length > LIMITS.imageChars)) throw new AppError('err.imgBig');
+  if (input.profileStroke !== undefined && input.profileStroke !== null && !/^#[0-9a-f]{6}$/i.test(input.profileStroke)) throw new AppError('err.badText');
   if (currentUser.serverBacked) {
-    await updateRemoteProfile(userId, { name, bio, avatar: input.avatar });
+    await updateRemoteProfile(userId, { name, bio, avatar: input.avatar, banner: input.banner, profileStroke: input.profileStroke });
     return;
   }
   db.transaction((d) => {
@@ -26,6 +28,8 @@ export async function updateProfile(userId: string, input: { name: string; bio: 
     if (input.avatar !== undefined) {
       user.avatar = input.avatar ?? undefined;
     }
+    if (input.banner !== undefined) user.banner = input.banner ?? undefined;
+    if (input.profileStroke !== undefined) user.profileStroke = input.profileStroke ?? undefined;
   });
 }
 

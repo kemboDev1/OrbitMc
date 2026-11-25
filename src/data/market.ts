@@ -6,6 +6,7 @@ import type { AuraTier, Listing, ListingKind, ThemeData, FrameData, User } from 
 import { claimRemoteDaily, createRemoteListing, purchaseRemoteListing, removeRemoteListing } from './cloud';
 
 export function getAura(user: User) {
+  if (user.isOwner) return { tier: 'nova' as const, cycle: 'year' as const, since: 0, renews: Number.MAX_SAFE_INTEGER };
   const sub = user.serverBacked ? null : user.aura;
   return sub && Math.abs(sub.renews) > Date.now() ? sub : null;
 }

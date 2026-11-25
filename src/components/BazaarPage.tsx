@@ -113,6 +113,7 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
   const [accent, setAccent] = useState('#ff5b2e');
   const [secondColor, setSecondColor] = useState('#e7aa56');
   const [darkTheme, setDarkTheme] = useState(false);
+  const [gradientEnabled, setGradientEnabled] = useState(true);
   const [spinFrame, setSpinFrame] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -128,6 +129,7 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
         raised: darkTheme ? '#202D36' : '#E9E6DC',
         line: darkTheme ? '#34444F' : '#D4D1C7',
         accent,
+        gradient: gradientEnabled ? `linear-gradient(135deg, ${accent}, ${secondColor})` : undefined,
       } : undefined;
       const frame = kind === 'frame' ? { colors: [accent, secondColor], spin: spinFrame } : undefined;
       await createListing({ userId: user.id, kind, name, about, price: Number(price), theme, frame, auraOnly: kind === 'frame' });
@@ -141,10 +143,11 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
     '--preview-raised': darkTheme ? '#202D36' : '#E9E6DC',
     '--preview-line': darkTheme ? '#34444F' : '#D4D1C7',
     '--preview-accent': accent,
+    '--preview-gradient': gradientEnabled ? `linear-gradient(135deg, ${accent}, ${secondColor})` : 'none',
   } as React.CSSProperties;
   return <Modal open={open} onClose={onClose} title={t('makeListing')} subtitle={t('creator')} size="md"><form className="stack-form creator-form" onSubmit={submit}>
     <div className="field-label">{t('listingKind')}<div className="creator-kinds">{(['theme', 'frame'] as ListingKind[]).map((k) => <button type="button" aria-pressed={kind === k} className={`creator-kind ${kind === k ? 'active' : ''}`} onClick={() => setKind(k)} key={k}><span>{k === 'theme' ? '◐' : '◎'}</span><small>{t(k === 'theme' ? 'creatorTheme' : 'creatorFrame')}</small></button>)}</div></div>
-    {kind === 'theme' && <div className="field-label">{t('themeTone')}<div className="segmented-choice"><button type="button" aria-pressed={!darkTheme} className={!darkTheme ? 'selected' : ''} onClick={() => setDarkTheme(false)}>{t('light')}</button><button type="button" aria-pressed={darkTheme} className={darkTheme ? 'selected' : ''} onClick={() => setDarkTheme(true)}>{t('dark')}</button></div></div>}
+    {kind === 'theme' && <div className="field-label">{t('themeTone')}<div className="segmented-choice"><button type="button" aria-pressed={!darkTheme} className={!darkTheme ? 'selected' : ''} onClick={() => setDarkTheme(false)}>{t('light')}</button><button type="button" aria-pressed={darkTheme} className={darkTheme ? 'selected' : ''} onClick={() => setDarkTheme(true)}>{t('dark')}</button></div><div className="creator-color-pair"><label>{t('chooseColor')}<input type="color" value={accent} onChange={(event) => setAccent(event.target.value)}/></label><label>{t('frameSecondColor')}<input type="color" value={secondColor} onChange={(event) => setSecondColor(event.target.value)}/></label><label className="creator-motion"><input type="checkbox" checked={gradientEnabled} onChange={(event) => setGradientEnabled(event.target.checked)}/>{t('gradientTheme')}</label></div></div>}
     <div className="field-label">{t('chooseColor')}<div className="color-swatches">{hues.map((h) => <button type="button" key={h} title={h} aria-label={`${t('chooseColor')} ${h}`} aria-pressed={accent === h} className={accent === h ? 'selected' : ''} style={{ '--swatch': h } as React.CSSProperties} onClick={() => setAccent(h)}/>)}</div></div>
     {kind === 'frame' && <><div className="field-label">{t('frameSecondColor')}<div className="color-swatches">{hues.map((h) => <button type="button" key={h} title={h} aria-label={`${t('frameSecondColor')} ${h}`} aria-pressed={secondColor === h} className={secondColor === h ? 'selected' : ''} style={{ '--swatch': h } as React.CSSProperties} onClick={() => setSecondColor(h)}/>)}</div></div><label className="creator-motion"><input type="checkbox" checked={spinFrame} onChange={(event) => setSpinFrame(event.target.checked)}/>{t('frameMotion')}</label></>}
     <div className="creator-live-preview"><span className="creator-live-label">{t('creatorPreview')}</span><div className="creator-preview-stage">{kind === 'theme' ? <div className="theme-preview" style={themePreviewStyle}><div className="preview-window"><i/><i/><i/><b/><em/><em/><strong/></div><span className="theme-name-preview">{name.trim() || t('creatorTheme')}</span></div> : <div className="frame-preview" style={{ '--frame-a': accent, '--frame-b': secondColor } as React.CSSProperties}><span className={`frame-orbit ${spinFrame ? 'spin' : ''}`}/><span className="frame-face">{user.name.slice(0, 1).toUpperCase()}</span><span className="frame-stars">✳</span></div>}</div></div>

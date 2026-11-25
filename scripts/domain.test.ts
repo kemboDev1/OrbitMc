@@ -4,7 +4,7 @@ import { register, validateBio, validateName, validatePassword } from '../src/da
 import { sendMessage, addReaction, editMessage, pinMessage, deleteMessage, startDM } from '../src/data/chat';
 import { db } from '../src/data/db';
 import { chronologicalRemoteHistory } from '../src/data/cloud';
-import { clearHistory, hiddenBefore, hideMessage, isBlocked, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setMuted } from '../src/data/chatControls';
+import { clearHistory, deleteChatForUser, getChatTheme, hiddenBefore, hideMessage, isBlocked, isChatDeleted, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setChatTheme, setMuted } from '../src/data/chatControls';
 import { AppError } from '../src/data/errors';
 import { addRoom, joinInvite, leaveHub, makeHub } from '../src/data/hubs';
 import { buyListing, cancelAura, claimDaily, createListing, equipListing, giftListing, hasAura, subscribeAura } from '../src/data/market';
@@ -124,6 +124,10 @@ test('conversation controls stay per account and history can be restored', () =>
   setBlocked(owner, other, true);
   assert.equal(isMuted(owner, other), true);
   assert.equal(isBlocked(owner, other), true);
+  setMuted(owner, other, true, 60_000);
+  assert.equal(isMuted(owner, other), true, 'a timed mute stays active until it expires');
+  setMuted(owner, other, true, -1);
+  assert.equal(isMuted(owner, other), false, 'an expired timed mute is ignored');
   assert.equal(isBlocked(other, owner), false, 'block settings are private to the local account');
   setMuted(owner, other, false);
   setBlocked(owner, other, false);
@@ -143,4 +147,12 @@ test('conversation controls stay per account and history can be restored', () =>
   restoreHistory(owner, channel, previous);
   assert.equal(hiddenBefore(owner, channel), 0, 'undo restores the previous history boundary');
   assert.equal(isMessageHidden(owner, channel, 'hidden-message'), true, 'individual hidden messages remain hidden');
+  setChatTheme(owner, channel, 'ocean');
+  assert.equal(getChatTheme(owner, channel), 'ocean');
+  assert.equal(getChatTheme(other, channel), 'default', 'chat appearance belongs to the current account');
+  setChatTheme(owner, channel, 'default');
+  assert.equal(getChatTheme(owner, channel), 'default', 'default removes a saved override');
+  deleteChatForUser(owner, channel);
+  assert.equal(isChatDeleted(owner, channel), true);
+  assert.equal(isChatDeleted(other, channel), false, 'chat hiding is private to the local account');
 });
