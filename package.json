@@ -1,7 +1,7 @@
 {
   "name": "orbitmc-desktop",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "OrbitMc - chats, hubs and Orbit Shop",
   "main": "electron/main.cjs",
   "author": "OrbitMc",
@@ -77,7 +77,8 @@
         "deb",
         "rpm"
       ],
-      "category": "Social"
+      "category": "Social",
+      "maintainer": "OrbitMc contributors"
     },
     "nsis": {
       "oneClick": false,
