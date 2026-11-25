@@ -14,6 +14,8 @@ interface ProfileRow {
   avatar: string | null;
   banner?: string | null;
   profile_stroke?: string | null;
+  profile_tags?: string[] | null;
+  profile_template?: 'clean' | 'halo' | 'frame' | null;
   presence: Presence;
   status_text: string;
   created_at: string;
@@ -162,6 +164,8 @@ function toUser(row: ProfileRow, previous?: User): User {
     avatar: row.avatar ?? undefined,
     banner: row.banner ?? undefined,
     profileStroke: row.profile_stroke ?? undefined,
+    profileTags: Array.isArray(row.profile_tags) ? row.profile_tags.slice(0, 5) : [],
+    profileTemplate: row.profile_template ?? 'clean',
     presence: row.presence,
     statusText: row.status_text,
     createdAt: new Date(row.created_at).getTime(),
@@ -511,7 +515,7 @@ export function subscribeRemoteWorkspace(userId: string, onError: (error: Error)
   return () => { void client.removeChannel(channel); };
 }
 
-export async function updateRemoteProfile(userId: string, values: { name?: string; bio?: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; presence?: Presence; statusText?: string }) {
+export async function updateRemoteProfile(userId: string, values: { name?: string; bio?: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; profileTags?: string[]; profileTemplate?: 'clean' | 'halo' | 'frame'; presence?: Presence; statusText?: string }) {
   const client = requireSupabase();
   const update: Record<string, unknown> = {};
   if (values.name !== undefined) update.display_name = values.name;
@@ -519,6 +523,8 @@ export async function updateRemoteProfile(userId: string, values: { name?: strin
   if (values.avatar !== undefined) update.avatar = values.avatar;
   if (values.banner !== undefined) update.banner = values.banner;
   if (values.profileStroke !== undefined) update.profile_stroke = values.profileStroke;
+  if (values.profileTags !== undefined) update.profile_tags = values.profileTags;
+  if (values.profileTemplate !== undefined) update.profile_template = values.profileTemplate;
   if (values.presence !== undefined) update.presence = values.presence;
   if (values.statusText !== undefined) update.status_text = values.statusText;
   const { data, error } = await client.from('profiles').update(update).eq('id', userId).select('*').single();

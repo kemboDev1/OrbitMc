@@ -6,7 +6,7 @@ import { validateBio, validateName } from './auth';
 import type { Presence } from './types';
 import { updateRemoteProfile } from './cloud';
 
-export async function updateProfile(userId: string, input: { name: string; bio: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null }): Promise<void> {
+export async function updateProfile(userId: string, input: { name: string; bio: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; profileTags?: string[]; profileTemplate?: 'clean' | 'halo' | 'frame' }): Promise<void> {
   const name = validateName(input.name);
   const bio = validateBio(input.bio);
   const currentUser = db.get().users[userId];
@@ -16,8 +16,11 @@ export async function updateProfile(userId: string, input: { name: string; bio: 
   }
   for (const image of [input.banner]) if (image !== undefined && image !== null && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image) || image.length > LIMITS.imageChars)) throw new AppError('err.imgBig');
   if (input.profileStroke !== undefined && input.profileStroke !== null && !/^#[0-9a-f]{6}$/i.test(input.profileStroke)) throw new AppError('err.badText');
+  const tags = (input.profileTags ?? currentUser?.profileTags ?? []).map((tag) => tag.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  if (tags.length > 5 || tags.some((tag) => tag.length > 20 || !/^[\p{L}\p{N} _-]+$/u.test(tag))) throw new AppError('err.badText');
+  if (input.profileTemplate !== undefined && !['clean', 'halo', 'frame'].includes(input.profileTemplate)) throw new AppError('err.badText');
   if (currentUser.serverBacked) {
-    await updateRemoteProfile(userId, { name, bio, avatar: input.avatar, banner: input.banner, profileStroke: input.profileStroke });
+    await updateRemoteProfile(userId, { name, bio, avatar: input.avatar, banner: input.banner, profileStroke: input.profileStroke, profileTags: input.profileTags === undefined ? undefined : tags, profileTemplate: input.profileTemplate });
     return;
   }
   db.transaction((d) => {
@@ -30,6 +33,8 @@ export async function updateProfile(userId: string, input: { name: string; bio: 
     }
     if (input.banner !== undefined) user.banner = input.banner ?? undefined;
     if (input.profileStroke !== undefined) user.profileStroke = input.profileStroke ?? undefined;
+    if (input.profileTags !== undefined) user.profileTags = tags;
+    if (input.profileTemplate !== undefined) user.profileTemplate = input.profileTemplate;
   });
 }
 

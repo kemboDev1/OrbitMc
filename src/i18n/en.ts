@@ -1,4 +1,5 @@
 const en = {
+  profileTags: 'Profile tags', profileTagsHint: 'e.g. Music, Design, Tashkent (up to 5)', profileTemplate: 'Profile style', profileTemplateClean: 'Clean', profileTemplateHalo: 'Halo', profileTemplateFrame: 'Frame',
   profileBanner: 'Profile banner', removeBanner: 'Remove banner', profileStroke: 'Profile outline', promoteMember: 'Make moderator', demoteMember: 'Make member', removeMember: 'Remove from hub', memberPromoted: 'Moderator role assigned.', memberDemoted: 'Moderator role removed.', memberRemoved: 'Member removed from the hub.',
 
   chatTheme: 'Chat theme', chatTheme_default: 'Default', chatTheme_ember: 'Ember', chatTheme_ocean: 'Ocean', chatTheme_moss: 'Moss', chatTheme_violet: 'Violet', chatThemeLocalOnly: 'This theme is saved on this device.', chatThemeSaved: 'Chat theme updated.',

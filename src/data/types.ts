@@ -20,6 +20,8 @@ export interface User {
   avatar?: string;
   banner?: string;
   profileStroke?: string;
+  profileTags?: string[];
+  profileTemplate?: 'clean' | 'halo' | 'frame';
   presence: Presence;
   statusText: string;
   createdAt: number;

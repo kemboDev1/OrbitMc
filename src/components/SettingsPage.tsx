@@ -31,6 +31,8 @@ export function SettingsPage({ user, onSignedOut, isOwner = false, onOpenAdmin }
   const [avatar, setAvatar] = useState(user.avatar ?? '');
   const [banner, setBanner] = useState(user.banner ?? '');
   const [profileStroke, setProfileStroke] = useState(user.profileStroke ?? '#ff5b2e');
+  const [profileTagsText, setProfileTagsText] = useState((user.profileTags ?? []).join(', '));
+  const [profileTemplate, setProfileTemplate] = useState<User['profileTemplate']>(user.profileTemplate ?? 'clean');
   const [saveBusy, setSaveBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -55,7 +57,7 @@ export function SettingsPage({ user, onSignedOut, isOwner = false, onOpenAdmin }
   const used = useMemo(() => db.bytes(), [user, db.use]);
   const save = async (e: FormEvent) => {
     e.preventDefault(); setSaveBusy(true);
-    try { await updateProfile(user.id, { name, bio, avatar: avatar || null, banner: banner || null, profileStroke: profileStroke || null }); tell(t('profileSaved'), 'good'); }
+    try { await updateProfile(user.id, { name, bio, avatar: avatar || null, banner: banner || null, profileStroke: profileStroke || null, profileTags: profileTagsText.split(',').map((tag) => tag.trim()).filter(Boolean), profileTemplate: profileTemplate ?? 'clean' }); tell(t('profileSaved'), 'good'); }
     catch (e) { tell(e instanceof AppError ? t(e.key) : t('err.saveFailed'), 'bad'); }
     finally { setSaveBusy(false); }
   };
@@ -146,6 +148,7 @@ export function SettingsPage({ user, onSignedOut, isOwner = false, onOpenAdmin }
             <div className="avatar-editor"><Avatar user={{ ...user, name, avatar: avatar || undefined }} size="xl"/><div><strong>{t('avatar')}</strong><p>{t('avatarHelp')}</p><div className="avatar-actions"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden ref={avatarRef} onChange={chooseAvatar}/><button type="button" className="btn btn-outline btn-small" onClick={() => avatarRef.current?.click()}><Icon name="upload" size={14}/>{t('changeAvatar')}</button>{avatar && <button type="button" className="btn btn-ghost btn-small" onClick={() => setAvatar('')}>{t('removeAvatar')}</button>}</div></div></div>
             <div className="profile-banner-editor"><input hidden ref={bannerRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseBanner}/><div className="profile-banner-preview" style={{ backgroundImage: banner ? `url(${banner})` : undefined }}><span>{t('profileBanner')}</span></div><div className="avatar-actions"><button type="button" className="btn btn-outline btn-small" onClick={() => bannerRef.current?.click()}><Icon name="image" size={14}/>{t('profileBanner')}</button>{banner && <button type="button" className="btn btn-ghost btn-small" onClick={() => setBanner('')}>{t('removeBanner')}</button>}<label className="profile-stroke-picker">{t('profileStroke')}<input type="color" value={profileStroke} onChange={(event) => setProfileStroke(event.target.value)}/></label></div></div>
             <div className="profile-fields"><label className="field-label">{t('profileName')}<input className="field-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.name}/></label><div className="field-label">{t('username')}<span className="field-input field-readonly">@{user.username}<Icon name="lock" size={14}/></span></div><label className="field-label">{t('profileBio')}<textarea className="field-input field-textarea" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} placeholder={t('bioPlaceholder')}/><small className="field-counter">{bio.length}/{LIMITS.bio}</small></label></div>
+            <label className="field-label profile-tags-input">{t('profileTags')}<input className="field-input" value={profileTagsText} onChange={(event) => setProfileTagsText(event.target.value)} maxLength={110} placeholder={t('profileTagsHint')}/><small>{t('profileTemplate')} <select className="sort-select" value={profileTemplate ?? 'clean'} onChange={(event) => setProfileTemplate(event.target.value as User['profileTemplate'])}><option value="clean">{t('profileTemplateClean')}</option><option value="halo">{t('profileTemplateHalo')}</option><option value="frame">{t('profileTemplateFrame')}</option></select></small></label>
             <div className="profile-form-actions"><span>{t('memberSince', { date: fmtDate(user.createdAt, lang) })}</span><button className="btn btn-primary btn-small" disabled={saveBusy}>{saveBusy ? t('loading') : t('saveProfile')}</button></div>
           </form>
         </section>

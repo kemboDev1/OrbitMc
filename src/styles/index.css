@@ -1097,3 +1097,8 @@ button, a { transition-duration: .18s; }
 .chat-layout[data-chat-theme='violet'] { --chat-tint: 13 7 19; --chat-accent: 164 130 237; }
 .chat-layout[data-chat-theme] .message-row.mine .message-text { border-color: color-mix(in srgb, rgb(var(--chat-accent, 255 91 46)) 35%, var(--line)); background: color-mix(in srgb, rgb(var(--chat-accent, 255 91 46)) 15%, var(--raised)); }
 .chat-layout[data-chat-theme] .message-row:not(.mine) .message-text { background: color-mix(in srgb, rgb(var(--chat-tint, 128 128 128)) 16%, var(--raised)); }
+.profile-tags-input small { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+.profile-tag-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 6px auto 10px; }
+.profile-tag-list span { padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 8px; }
+.profile-template-halo > .avatar-wrap { box-shadow: 0 0 0 2px var(--profile-stroke, var(--accent)), 0 0 22px color-mix(in srgb, var(--profile-stroke, var(--accent)) 55%, transparent); }
+.profile-template-frame { border-radius: 12px; outline: 1px solid color-mix(in srgb, var(--profile-stroke, var(--accent)) 55%, var(--line)); outline-offset: 5px; }

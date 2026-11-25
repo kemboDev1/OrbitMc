@@ -1,6 +1,7 @@
 import type en from './en';
 
 const uz: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [S in keyof (typeof en)[K]]: string } } = {
+  profileTags: 'Profil yorliqlari', profileTagsHint: 'Masalan: musiqa, dizayn, Toshkent (5 tagacha)', profileTemplate: 'Profil uslubi', profileTemplateClean: 'Sodda', profileTemplateHalo: 'Yorqin', profileTemplateFrame: 'Hoshiyali',
   profileBanner: 'Profil muqovasi', removeBanner: 'Muqovani olib tashlash', profileStroke: 'Profil halqasi rangi', promoteMember: 'Moderator qilish', demoteMember: 'A’zolik roliga tushirish', removeMember: 'Hamjamiyatdan chiqarish', memberPromoted: 'Moderator vakolati berildi.', memberDemoted: 'Moderator vakolati olindi.', memberRemoved: 'A’zo hamjamiyatdan chiqarildi.',
 
   chatTheme: 'Suhbat ko‘rinishi', chatTheme_default: 'Asosiy', chatTheme_ember: 'Cho‘g‘', chatTheme_ocean: 'Okean', chatTheme_moss: 'Mox', chatTheme_violet: 'Binafsha', chatThemeLocalOnly: 'Bu ko‘rinish shu qurilmada saqlanadi.', chatThemeSaved: 'Suhbat ko‘rinishi o‘zgartirildi.',

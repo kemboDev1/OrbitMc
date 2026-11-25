@@ -1,6 +1,7 @@
 import type en from './en';
 
 const ru: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [S in keyof (typeof en)[K]]: string } } = {
+  profileTags: 'Метки профиля', profileTagsHint: 'Например: музыка, дизайн, Ташкент (до 5)', profileTemplate: 'Стиль профиля', profileTemplateClean: 'Чистый', profileTemplateHalo: 'Ореол', profileTemplateFrame: 'Рамка',
   profileBanner: 'Обложка профиля', removeBanner: 'Убрать обложку', profileStroke: 'Цвет обводки профиля', promoteMember: 'Назначить модератором', demoteMember: 'Вернуть роль участника', removeMember: 'Удалить из сообщества', memberPromoted: 'Назначена роль модератора.', memberDemoted: 'Роль модератора снята.', memberRemoved: 'Участник удалён из сообщества.',
 
   chatTheme: 'Тема диалога', chatTheme_default: 'Обычная', chatTheme_ember: 'Уголь', chatTheme_ocean: 'Океан', chatTheme_moss: 'Мох', chatTheme_violet: 'Фиолетовая', chatThemeLocalOnly: 'Тема сохранена на этом устройстве.', chatThemeSaved: 'Тема диалога обновлена.',
