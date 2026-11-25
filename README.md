@@ -17,7 +17,7 @@ A bilingual, installable social app with Supabase email accounts, shared direct 
 
 ## Run locally
 
-Requirements: Node.js **20.19 or later** and npm.
+Requirements: Node.js **22.12 or later** and npm.
 
 ```bash
 npm install
@@ -41,7 +41,7 @@ npm run preview
 
 1. Extract the ZIP, put the **contents** of this folder at the root of a GitHub repository, and push the repository.
 2. In Vercel, import that repository. Use the included `vercel.json`; the project builds with `npm run build` and serves `dist`.
-3. Set the project to a supported Node version (20.19+; Node 22 or 24 is suitable), deploy, then open the HTTPS URL and check both the desktop view and a phone-sized view.
+3. Set the project to a supported Node version (22.12+; Node 22 or later), deploy, then open the HTTPS URL and check both the desktop view and a phone-sized view.
 4. Commit the `package-lock.json` produced by `npm i` before a real release so installs are repeatable.
 
 Apply all database migrations in filename order before deploying. Vercel and the desktop release workflow use the app's public Supabase configuration by default; optional `VITE_SUPABASE_*` settings can override it. Keep service-role and OAuth client secrets server-side.
