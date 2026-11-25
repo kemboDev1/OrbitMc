@@ -244,7 +244,7 @@ export default function App() {
         {view === 'bazaar' && <BazaarPage db={data} user={user}/>}
         {view === 'aura' && <AuraPage user={user}/>}
         {view === 'settings' && <SettingsPage user={user} onSignedOut={markSignedOut} isOwner={ownerAccess} onOpenAdmin={() => toView('admin')}/>}
-        {view === 'admin' && ownerAccess && <Suspense fallback={<div className="admin-loading"><span className="spinner"/>{t('loading')}</div>}><AdminPage onBack={() => toView('settings')}/></Suspense>}
+        {view === 'admin' && ownerAccess && user && <Suspense fallback={<div className="admin-loading"><span className="spinner"/>{t('loading')}</div>}><AdminPage db={data} user={user} onBack={() => toView('settings')}/></Suspense>}
         {view === 'admin' && !ownerAccess && <SettingsPage user={user} onSignedOut={markSignedOut}/>}
         </Suspense>
       </div>

@@ -6,8 +6,8 @@ import { db } from '../src/data/db';
 import { chronologicalRemoteHistory } from '../src/data/cloud';
 import { clearHistory, deleteChatForUser, getChatTheme, hiddenBefore, hideMessage, isBlocked, isChatDeleted, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setChatTheme, setMuted } from '../src/data/chatControls';
 import { AppError } from '../src/data/errors';
-import { addRoom, joinInvite, leaveHub, makeHub, updateHubDetails, updateHubRoom } from '../src/data/hubs';
-import { buyListing, cancelAura, claimDaily, createListing, equipListing, giftListing, hasAura, subscribeAura } from '../src/data/market';
+import { addRoom, joinInvite, leaveHub, makeHub, setHubMemberRole, updateHubDetails, updateHubRoom } from '../src/data/hubs';
+import { buyListing, cancelAura, claimDaily, createListing, equipListing, giftListing, getAura, hasAura, subscribeAura } from '../src/data/market';
 import type { User } from '../src/data/types';
 import { releaseAssetFor, type ReleaseAsset } from '../src/lib/downloads';
 
@@ -39,7 +39,9 @@ test('local profile previews, chats, rooms, bazaar and backups keep working', as
   const user = addUser('user_test', 'test_user');
   const other = addUser('user_other', 'other_user');
   const recipient = addUser('user_gift', 'gift_user');
+  assert.equal(getAura({ ...user, serverBacked: true, isOwner: true })?.tier, 'nova', 'the verified owner receives the highest Orbit Max tier at no cost');
   assert.ok(Object.values(db.get().listings).some((listing) => listing.sellerId === 'orbit-studio' && listing.kind === 'theme'), 'the starter collection includes original themes');
+  assert.equal(Object.values(db.get().listings).filter((listing) => listing.sellerId === 'orbit-studio').length, 22, 'the starter shop now contains a broader collection of themes, frames and bundles');
   assert.ok(Object.values(db.get().listings).filter((listing) => listing.sellerId === 'orbit-studio').every((listing) => listing.kind !== 'stickers'), 'the studio shop does not seed sticker products');
 
   assert.equal(validateName('  Test   User '), 'Test User');
@@ -67,7 +69,10 @@ test('local profile previews, chats, rooms, bazaar and backups keep working', as
   await updateHubDetails(hub.id, user.id, { name: 'Studio corner', about: 'An updated description', emoji: '🌙', hue: 285, isPublic: true });
   await updateHubRoom(hub.id, user.id, room, { topic: 'Read the latest updates', kind: 'broadcast' });
   assert.equal(db.get().hubs[hub.id].name, 'Studio corner');
+  await setHubMemberRole(hub.id, user.id, other.id, 'mod');
+  assert.equal(db.get().hubs[hub.id].members[other.id], 'mod', 'the community owner can assign the moderator role');
   assert.equal(db.get().hubs[hub.id].rooms.find((item) => item.id === room)?.kind, 'broadcast');
+  await setHubMemberRole(hub.id, user.id, other.id, 'member');
   assert.throws(() => sendMessage({ channel: room, userId: other.id, text: 'A regular member cannot post here.' }), isError('err.notMember'));
   leaveHub(hub.id, other.id);
   assert.equal(db.get().hubs[hub.id].members[other.id], undefined);

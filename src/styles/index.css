@@ -5,15 +5,15 @@
   --ink: #eae6df;
   --muted: #9c978f;
   --faint: #8b867e;
-  --bg: #0c0d10;
-  --side: #101115;
-  --panel: #15161a;
-  --raised: #1b1c21;
-  --raised-2: #212228;
-  --line: #292a30;
-  --line-soft: #222329;
-  --accent: #ff5b2e;
-  --accent-hover: #ff714b;
+  --bg: #0b1118;
+  --side: #0f1821;
+  --panel: #141e28;
+  --raised: #1a2833;
+  --raised-2: #223540;
+  --line: #2a3d49;
+  --line-soft: #1d2d38;
+  --accent: #ff7557;
+  --accent-hover: #ff8a70;
   --accent-ink: #160a05;
   --aura: #dfa866;
   --success: #46cf91;
@@ -330,7 +330,9 @@ kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; 
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .avatar-xs { width: 22px; height: 22px; font-size: 8px; }.avatar-sm { width: 31px; height: 31px; font-size: 10px; }.avatar-md { width: 37px; height: 37px; font-size: 12px; }.avatar-lg { width: 49px; height: 49px; font-size: 16px; }.avatar-xl { width: 68px; height: 68px; font-size: 21px; }
 .avatar-blank { color: var(--muted); }
-.avatar-framed { padding: 2px; border: 0; background: conic-gradient(var(--frame-a), var(--frame-b), var(--frame-a)); animation: frame-spin 9s linear infinite; }.avatar-framed .avatar { border: 2px solid var(--side); animation: frame-spin 9s linear infinite reverse; }.avatar-frame-static { animation: none; }.avatar-frame-static .avatar { animation: none; }
+.avatar-framed { padding: 2px; border: 0; border-radius: 50%; background: conic-gradient(var(--frame-a), var(--frame-b), var(--frame-a)); animation: frame-spin 9s linear infinite; }.avatar-framed .avatar { border: 2px solid var(--side); border-radius: 50%; animation: frame-spin 9s linear infinite reverse; }.avatar-frame-static { animation: none; }.avatar-frame-static .avatar { animation: none; }
+.avatar-has-stroke:not(.avatar-framed) { padding: 2px; border-radius: 50%; background: conic-gradient(var(--profile-stroke), color-mix(in srgb,var(--profile-stroke) 45%,white), var(--profile-stroke), color-mix(in srgb,var(--profile-stroke) 65%,black), var(--profile-stroke)); }
+.avatar-has-stroke:not(.avatar-framed) .avatar { border: 2px solid var(--side); border-radius: 50%; }
 @keyframes frame-spin { to { transform: rotate(360deg); } }
 .status-dot { position: absolute; right: -1px; bottom: 0; width: 10px; height: 10px; border: 2px solid var(--side); border-radius: 50%; background: var(--faint); }
 .status-online, .status-mini.status-online { background: var(--success); }.status-idle, .status-mini.status-idle { background: #e5b455; }.status-dnd, .status-mini.status-dnd { background: var(--danger); }.status-offline, .status-mini.status-offline { background: #78756f; }
@@ -1122,3 +1124,36 @@ button, a { transition-duration: .18s; }
 @media (max-width:640px) { .hub-settings-row { grid-template-columns:1fr; gap:8px; } .hub-room-setting { grid-template-columns:1fr 1fr; } .hub-room-setting b { grid-column:1 / -1; } }
 
 @keyframes bundle-float { 0%,100% { transform:translateY(0) rotate(-4deg); } 50% { transform:translateY(-5px) rotate(4deg); } }
+
+/* Orbit workstation redesign: deep marine surfaces, one coral focus color, clear depth. */
+.app-shell { background-image: radial-gradient(ellipse at 76% 0%, color-mix(in srgb,var(--accent) 7%,transparent),transparent 42%), linear-gradient(145deg,#0b1118,#0a1016 60%,#101723); }
+.icon-rail { background:linear-gradient(180deg,color-mix(in srgb,var(--side) 90%,#1f3542),var(--bg) 72%); border-color:color-mix(in srgb,var(--line) 76%,transparent); }
+.side-panel { background:linear-gradient(160deg,color-mix(in srgb,var(--side) 94%,#1c303d),var(--side) 48%); }
+.topbar,.conversation-header { background:color-mix(in srgb,var(--theme-panel,var(--panel)) 92%,transparent); backdrop-filter:blur(18px); }
+.main-area { background-color:var(--theme-bg,var(--bg)); }
+.conversation { background-image:radial-gradient(ellipse at 52% 0%,color-mix(in srgb,var(--accent) 4%,transparent),transparent 58%); }
+.conversation-intro { border-color:color-mix(in srgb,var(--accent) 13%,var(--line-soft)); }
+.conversation-intro h2 { letter-spacing:-.035em; }
+.composer-box { border-radius:16px; box-shadow:0 12px 40px #0002; }
+.market-page,.settings-page,.people-page,.hubs-page,.aura-page { --surface-tint:color-mix(in srgb,var(--accent) 3%,var(--bg)); }
+.product-card,.hub-card,.person-card,.settings-card { box-shadow:0 12px 34px #00000016; }
+.admin-roles { display:grid; gap:13px; padding-top:14px; }
+.admin-roles > header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.admin-roles h2 { margin:0 0 4px; font-size:14px; }
+.admin-roles p { margin:0; color:var(--muted); font-size:10px; }
+.admin-role-person { grid-template-columns:34px minmax(120px,1fr) 110px auto; }
+.role-badge { justify-self:start; padding:4px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:9px; }
+.role-mod { border-color:color-mix(in srgb,var(--accent) 40%,var(--line)); background:color-mix(in srgb,var(--accent) 9%,transparent); color:var(--accent); }
+.owner-plan-bar { border-color:color-mix(in srgb,#d9b56e 42%,var(--line)); background:linear-gradient(112deg,color-mix(in srgb,#d9b56e 10%,var(--panel)),var(--panel)); }
+.owner-plan-bar .current-plan-icon { background:color-mix(in srgb,#d9b56e 17%,var(--raised)); color:#e3c478; }
+.avatar-framed { box-sizing:content-box; }
+.profile-aside-card > .avatar-wrap { border-radius:50%; }
+@media (max-width:700px) {
+  .admin-role-person { grid-template-columns:32px minmax(0,1fr) auto; }
+  .admin-role-person .role-badge { grid-column:2; }
+  .admin-role-person .btn { grid-column:2 / -1; justify-self:start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar-framed { animation:none; }
+  .avatar-framed .avatar { animation:none; }
+}

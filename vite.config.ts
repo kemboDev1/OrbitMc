@@ -16,6 +16,16 @@ export default defineConfig(({ mode }) => {
       target: 'es2022',
       sourcemap: false,
       outDir: 'dist',
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              { name: 'react-vendor', test: /[\\/]node_modules[\\/](?:react|react-dom|scheduler)[\\/]/ },
+              { name: 'supabase-vendor', test: /[\\/]node_modules[\\/]@supabase[\\/]/ },
+            ],
+          },
+        },
+      },
     },
   };
 });
