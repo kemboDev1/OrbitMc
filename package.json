@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test scripts/domain.test.ts",
     "electron:dev": "node scripts/electron-dev.mjs",
-    "electron:build": "npm run build && electron-builder",
+    "electron:build": "npm run build && electron-builder --publish never",
     "release": "electron-builder"
   },
   "dependencies": {
