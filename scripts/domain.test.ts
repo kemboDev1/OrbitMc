@@ -105,12 +105,13 @@ test('local profile previews, chats, rooms, bazaar and backups keep working', as
 test('release lookup only selects the installer matching the detected platform', () => {
   const assets: ReleaseAsset[] = [
     { name: 'OrbitMc-Windows-1.2.3.exe', browser_download_url: 'https://example.invalid/windows.exe' },
-    { name: 'OrbitMc-1.2.3.dmg', browser_download_url: 'https://example.invalid/macos.dmg' },
+    { name: 'OrbitMc-1.2.3-universal.dmg', browser_download_url: 'https://example.invalid/macos.dmg' },
     { name: 'OrbitMc-1.2.3.AppImage', browser_download_url: 'https://example.invalid/linux.AppImage' },
     { name: 'OrbitMc-Windows-1.2.3.zip', browser_download_url: 'https://example.invalid/other.zip' },
   ];
   assert.equal(releaseAssetFor('windows', assets)?.name, 'OrbitMc-Windows-1.2.3.exe');
-  assert.equal(releaseAssetFor('macos', assets)?.name, 'OrbitMc-1.2.3.dmg');
+  assert.equal(releaseAssetFor('macos', assets)?.name, 'OrbitMc-1.2.3-universal.dmg');
+  assert.equal(releaseAssetFor('macos', [{ name: 'OrbitMc-1.2.3-arm64.dmg', browser_download_url: 'https://example.invalid/arm64.dmg' }])?.name, 'OrbitMc-1.2.3-arm64.dmg');
   assert.equal(releaseAssetFor('linux', assets)?.name, 'OrbitMc-1.2.3.AppImage');
   assert.equal(releaseAssetFor('unknown', assets), undefined);
 });

@@ -51,7 +51,7 @@ export async function fetchLatestRelease(): Promise<ReleaseAsset[] | null> {
 
 const ASSET_PATTERN: Record<Exclude<DesktopTarget, 'unknown'>, RegExp> = {
   windows: /^OrbitMc-Windows-[\d.]+\.exe$/i,
-  macos: /^OrbitMc-[\d.]+\.dmg$/i,
+  macos: /^OrbitMc-[\d.]+(?:-(?:arm64|x64|universal))?\.dmg$/i,
   linux: /^OrbitMc-[\d.]+\.AppImage$/i,
 };
 

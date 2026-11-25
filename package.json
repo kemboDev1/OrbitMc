@@ -1,7 +1,7 @@
 {
   "name": "orbitmc-desktop",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "OrbitMc - chats, hubs and Orbit Shop",
   "main": "electron/main.cjs",
   "author": "OrbitMc",
@@ -59,8 +59,14 @@
     ],
     "mac": {
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": ["universal"]
+        },
+        {
+          "target": "zip",
+          "arch": ["universal"]
+        }
       ],
       "category": "public.app-category.social-networking"
     },
