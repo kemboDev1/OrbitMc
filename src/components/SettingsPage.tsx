@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Crown, Sparkles, Tag, Type, Wand2 } from 'lucide-react';
 import type { User } from '../data/types';
-import { updateAccent, updateProfile } from '../data/profile';
+import { updateAccent, updateProFlex, updateProfile } from '../data/profile';
 import { session } from '../data/session';
 import { signOut } from '../data/auth';
 import { isAdminUser, toggleSelfAdminPreview } from '../data/admin';
@@ -12,7 +13,7 @@ import { useI18n, language } from '../i18n';
 import { installApp, installPrompt, isStandalone } from '../lib/pwa';
 import { isDesktop } from '../lib/electron';
 import { askNotify } from '../lib/notify';
-import { ACCENTS, LIMITS } from '../config';
+import { ACCENTS, BANNER_GRADIENTS, CHAT_FONTS, LIMITS, MESSAGE_EFFECTS } from '../config';
 import { fmtDate } from '../lib/util';
 import { Avatar } from './Avatar';
 import { BrandMark } from './BrandMark';
@@ -21,16 +22,36 @@ import { Modal } from './Modal';
 import { tell } from './Toast';
 import { AppError } from '../data/errors';
 
+export function bannerStyleFor(user: User, overrideBanner?: string): React.CSSProperties {
+  const b = overrideBanner !== undefined ? overrideBanner : user.banner;
+  if (b && b.startsWith('grad:')) {
+    const found = BANNER_GRADIENTS.find((g) => g.id === b);
+    if (found) return { background: found.css };
+  }
+  if (b && b.startsWith('data:image/')) {
+    return { backgroundImage: `url(${b})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+  }
+  return { '--cover-hue': user.hue } as React.CSSProperties;
+}
+
 export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
   const { t, lang } = useI18n();
   const data = db.use();
   const pr = prefs.use();
   const currentTheme = themeMode.use();
   const avatarRef = useRef<HTMLInputElement>(null);
+  const bannerRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(user.name);
   const [bio, setBio] = useState(user.bio);
   const [avatar, setAvatar] = useState(user.avatar ?? '');
+  const [banner, setBanner] = useState(user.banner ?? 'grad:cosmic');
+  const [profileStroke, setProfileStroke] = useState(user.profileStroke ?? '');
+  const [profileTags, setProfileTags] = useState<string[]>(user.profileTags ?? []);
+  const [tagDraft, setTagDraft] = useState('');
+  const [profileTemplate, setProfileTemplate] = useState<'clean' | 'halo' | 'frame'>(user.profileTemplate ?? 'halo');
+  const [chatFont, setChatFont] = useState<'sans' | 'display' | 'mono' | 'serif'>(user.chatFont ?? 'sans');
+  const [messageEffect, setMessageEffect] = useState<'none' | 'glow' | 'aurora' | 'ember'>(user.messageEffect ?? 'none');
   const [saveBusy, setSaveBusy] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -39,19 +60,50 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
   const [notificationBlocked, setNotificationBlocked] = useState(typeof Notification !== 'undefined' && Notification.permission === 'denied');
   const [accent, setAccent] = useState(user.accent ?? '');
 
+  const isPro = hasAura(user.id);
   const used = useMemo(() => db.bytes(), [data]);
+
+  const addTag = () => {
+    const clean = tagDraft.trim().replace(/\s+/g, ' ').slice(0, 20);
+    if (!clean || profileTags.length >= 5 || profileTags.includes(clean)) return;
+    setProfileTags((prev) => [...prev, clean]);
+    setTagDraft('');
+  };
+
   const save = async (e: FormEvent) => {
     e.preventDefault(); setSaveBusy(true);
-    try { await updateProfile(user.id, { name, bio, avatar: avatar || null }); tell(t('profileSaved'), 'good'); }
-    catch (err) { tell(err instanceof AppError ? t(err.key) : t('err.saveFailed'), 'bad'); }
+    try {
+      await updateProfile(user.id, {
+        name,
+        bio,
+        avatar: avatar || null,
+        banner: banner || null,
+        profileStroke: profileStroke || null,
+        profileTags,
+        profileTemplate,
+      });
+      if (isPro) {
+        updateProFlex(user.id, { chatFont, messageEffect });
+      }
+      tell(t('profileSaved'), 'good');
+    } catch (err) { tell(err instanceof AppError ? t(err.key) : t('err.saveFailed'), 'bad'); }
     finally { setSaveBusy(false); }
   };
+
   const chooseAvatar = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file) return;
     try { setAvatar(await fileToDataUrl(file, 560, LIMITS.imageChars)); }
     catch (err) { tell(err instanceof AppError ? t(err.key) : t('uploadAvatarError'), 'bad'); }
   };
+
+  const chooseBanner = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file) return;
+    try { setBanner(await fileToDataUrl(file, 960, LIMITS.imageChars)); }
+    catch (err) { tell(err instanceof AppError ? t(err.key) : t('uploadAvatarError'), 'bad'); }
+  };
+
   const exportBackup = () => {
     try {
       const blob = new Blob([db.exportJSON(user)], { type: 'application/json' });
@@ -110,29 +162,93 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
       <div className="settings-sections">
         <section className="settings-section" id="profile">
           <div className="settings-section-head"><span className="section-index">01</span><div><h2>{t('profile')}</h2><p>{t('editProfile')}</p></div></div>
-          <div className="profile-showcase-banner">
-            <div className="profile-showcase-cover" style={{ '--cover-hue': user.hue } as React.CSSProperties} />
+
+          <div className={`profile-showcase-banner tpl-${profileTemplate}`}>
+            <div className="profile-showcase-cover" style={bannerStyleFor(user, banner)} />
             <div className="profile-showcase-body">
-              <Avatar user={{ ...user, name, avatar: avatar || undefined }} size="xl" showStatus />
+              <Avatar user={{ ...user, name, avatar: avatar || undefined, profileStroke: profileStroke || undefined }} size="xl" showStatus />
               <div className="profile-showcase-meta">
                 <div className="profile-showcase-title">
-                  <strong>{name || user.name}</strong>
-                  {hasAura(user.id) && <span className="verified-badge"><Icon name="check" size={10} /></span>}
+                  <strong className={`font-${chatFont}`}>{name || user.name}</strong>
+                  {isPro && <span className={`pro-flex-pill tier-${user.aura?.tier ?? 'ember'}`}>{user.aura?.tier === 'nova' ? <Crown size={11} /> : <Sparkles size={11} />}{user.aura?.tier === 'nova' ? 'NOVA MAX' : `ORBIT+ ${user.aura?.tier.toUpperCase()}`}</span>}
                   {adminOn && <span className="admin-tag">{t('admin')}</span>}
                 </div>
                 <small>@{user.username} · {user.sparks.toLocaleString(lang)} {t('sparks')}</small>
                 <div className="profile-showcase-pills">
+                  {profileTags.map((tag) => (
+                    <span key={tag} className="profile-custom-tag"><Tag size={10} />{tag}</span>
+                  ))}
                   <span>{t('collectionCount', { count: user.inventory.length })}</span>
-                  <span>{hasAura(user.id) ? t('profilePlanLabel', { plan: user.aura?.tier.toUpperCase() ?? 'ORBIT+' }) : t('auraFree')}</span>
                 </div>
               </div>
             </div>
           </div>
 
           <form className="profile-settings-form" onSubmit={save}>
-            <div className="avatar-editor"><Avatar user={{ ...user, name, avatar: avatar || undefined }} size="xl" /><div><strong>{t('avatar')}</strong><p>{t('avatarHelp')}</p><div className="avatar-actions"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden ref={avatarRef} onChange={chooseAvatar} /><button type="button" className="btn btn-outline btn-small" onClick={() => avatarRef.current?.click()}><Icon name="upload" size={14} />{t('changeAvatar')}</button>{avatar && <button type="button" className="btn btn-ghost btn-small" onClick={() => setAvatar('')}>{t('removeAvatar')}</button>}</div></div></div>
-            <div className="profile-fields"><label className="field-label">{t('profileName')}<input className="field-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.name} /></label><div className="field-label">{t('username')}<span className="field-input field-readonly">@{user.username}<Icon name="lock" size={14} /></span></div><label className="field-label">{t('profileBio')}<textarea className="field-input field-textarea" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} placeholder={t('bioPlaceholder')} /><small className="field-counter">{bio.length}/{LIMITS.bio}</small></label></div>
-            <div className="profile-form-actions"><span>{t('memberSince', { date: fmtDate(user.createdAt, lang) })}</span><button className="btn btn-primary btn-small" disabled={saveBusy}>{saveBusy ? t('loading') : t('saveProfile')}</button></div>
+            <div className="avatar-editor"><Avatar user={{ ...user, name, avatar: avatar || undefined, profileStroke: profileStroke || undefined }} size="xl" /><div><strong>{t('avatar')}</strong><p>{t('avatarHelp')}</p><div className="avatar-actions"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden ref={avatarRef} onChange={chooseAvatar} /><button type="button" className="btn btn-outline btn-small" onClick={() => avatarRef.current?.click()}><Icon name="upload" size={14} />{t('changeAvatar')}</button>{avatar && <button type="button" className="btn btn-ghost btn-small" onClick={() => setAvatar('')}>{t('removeAvatar')}</button>}</div></div></div>
+
+            <div className="profile-fields">
+              <label className="field-label">{t('profileName')}<input className="field-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.name} /></label>
+              <div className="field-label">{t('username')}<span className="field-input field-readonly">@{user.username}<Icon name="lock" size={14} /></span></div>
+              <label className="field-label">{t('profileBio')}<textarea className="field-input field-textarea" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={LIMITS.bio} placeholder={t('bioPlaceholder')} /><small className="field-counter">{bio.length}/{LIMITS.bio}</small></label>
+
+              <div className="field-label">{t('profileBanner')}
+                <div className="banner-picker-row">
+                  {BANNER_GRADIENTS.map((g) => (
+                    <button key={g.id} type="button" className={`banner-grad-chip ${banner === g.id ? 'selected' : ''}`} style={{ background: g.css }} onClick={() => setBanner(g.id)} title={g.label}><span>{g.label}</span></button>
+                  ))}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" hidden ref={bannerRef} onChange={chooseBanner} />
+                  <button type="button" className="btn btn-outline btn-small" onClick={() => bannerRef.current?.click()}><Icon name="image" size={14} />{t('profileBannerUpload')}</button>
+                </div>
+              </div>
+
+              <div className="field-label">{t('profileStrokeLabel')}
+                <div className="color-swatches">
+                  <button type="button" className={`color-dot sado-dot ${!profileStroke ? 'selected' : ''}`} onClick={() => setProfileStroke('')} title={t('clearStatus')} />
+                  {ACCENTS.map((c) => (
+                    <button key={c} type="button" className={`color-dot ${profileStroke === c ? 'selected' : ''}`} style={{ '--swatch': c } as React.CSSProperties} onClick={() => setProfileStroke(c)} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="field-label">{t('profileTagsLabel')}
+                <div className="tag-editor-row">
+                  <input className="field-input" value={tagDraft} maxLength={20} placeholder={t('profileTagsPlaceholder')} onChange={(e) => setTagDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} />
+                  <button type="button" className="btn btn-outline btn-small" onClick={addTag} disabled={profileTags.length >= 5 || !tagDraft.trim()}><Icon name="plus" size={14} /></button>
+                </div>
+                {profileTags.length > 0 && <div className="tag-chips-list">
+                  {profileTags.map((tag) => (
+                    <span key={tag} className="profile-custom-tag"><Tag size={11} />{tag}<button type="button" onClick={() => setProfileTags((prev) => prev.filter((x) => x !== tag))} aria-label={t('delete')}><Icon name="close" size={11} /></button></span>
+                  ))}
+                </div>}
+              </div>
+
+              <div className="field-label">{t('profileTemplateLabel')}
+                <div className="segmented-choice">
+                  {(['clean', 'halo', 'frame'] as const).map((tpl) => (
+                    <button key={tpl} type="button" className={profileTemplate === tpl ? 'selected' : ''} onClick={() => setProfileTemplate(tpl)}>{tpl.toUpperCase()}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pro-flex-box">
+                <div className="pro-flex-head"><Wand2 size={15} /><strong>{t('auraFeatures')}</strong>{!isPro && <span className="pill-mini">ORBIT+ PRO</span>}</div>
+                <div className="auth-two-col">
+                  <label className="field-label"><Type size={12} /> {t('chatFontLabel')}
+                    <select className="sort-select" disabled={!isPro} value={chatFont} onChange={(e) => setChatFont(e.target.value as typeof chatFont)}>
+                      {CHAT_FONTS.map((f) => <option key={f} value={f}>{f.toUpperCase()}</option>)}
+                    </select>
+                  </label>
+                  <label className="field-label"><Sparkles size={12} /> {t('messageEffectLabel')}
+                    <select className="sort-select" disabled={!isPro} value={messageEffect} onChange={(e) => setMessageEffect(e.target.value as typeof messageEffect)}>
+                      {MESSAGE_EFFECTS.map((ef) => <option key={ef} value={ef}>{ef.toUpperCase()}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="profile-form-actions"><span>{t('memberSince', { date: fmtDate(user.createdAt, lang) })}</span><button type="submit" className="btn btn-primary btn-small" disabled={saveBusy}>{saveBusy ? t('loading') : t('saveProfile')}</button></div>
           </form>
         </section>
 

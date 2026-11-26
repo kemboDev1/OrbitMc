@@ -10,8 +10,7 @@ import { Modal } from './Modal';
 import { tell } from './Toast';
 import { AppError } from '../data/errors';
 import { LIMITS } from '../config';
-
-const symbols = ['✳', '🚀', '🌙', '🌱', '🎧', '☁', '✿', '▧', '⚑', '◎', '🪩', '🌿'];
+import { HUB_ICON_OPTIONS, HubSymbol } from './VectorAssets';
 
 export function HubPage({ db, user, onOpen, onCreate }: { db: DB; user: User; onOpen: (hub: Hub, room?: string) => void; onCreate: () => void }) {
   const { t, lang } = useI18n();
@@ -40,7 +39,7 @@ export function HubPage({ db, user, onOpen, onCreate }: { db: DB; user: User; on
         <button className="hub-card-main" onClick={() => onOpen(h)}>
           <div className="hub-card-cover" style={{ '--hub-hue': h.hue } as React.CSSProperties}>
             <span className="hub-card-orbit orbit-1" /><span className="hub-card-orbit orbit-2" />
-            <span className="hub-card-symbol">{h.emoji}</span>
+            <span className="hub-card-symbol"><HubSymbol mark={h.emoji} size={24} /></span>
             <span className="hub-card-number">{h.rooms.length} {t('rooms').toLowerCase()}</span>
             <span className="hub-card-go"><Icon name="arrowUpRight" size={16} /></span>
           </div>
@@ -58,14 +57,14 @@ export function HubPage({ db, user, onOpen, onCreate }: { db: DB; user: User; on
         </button>
         {canManage && <button type="button" className="hub-card-manage icon-btn" title={t('manageHub')} aria-label={t('manageHub')} onClick={() => setManagingHub(h)}><Icon name="sliders" size={14} /></button>}
       </article>;
-    })}</div> : <div className="inline-empty"><div className="empty-mark">✳</div><p>{t('noHubs')}</p><button className="btn btn-secondary btn-small" onClick={onCreate}>{t('createHub')}</button></div>}
+    })}</div> : <div className="inline-empty"><div className="empty-mark"><HubSymbol mark="icon:orbit" size={20} /></div><p>{t('noHubs')}</p><button className="btn btn-secondary btn-small" onClick={onCreate}>{t('createHub')}</button></div>}
 
     <div className="hub-section-head discover-head">
       <h2>{t('browseHubs')}</h2>
       <label className="mini-search"><Icon name="search" size={15} /><input placeholder={t('search')} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
     </div>
     {discover.length ? <div className="discover-list">{discover.map((h) => <div className="discover-row" key={h.id}>
-      <span className="discover-mark" style={{ '--hub-hue': h.hue } as React.CSSProperties}>{h.emoji}</span>
+      <span className="discover-mark" style={{ '--hub-hue': h.hue } as React.CSSProperties}><HubSymbol mark={h.emoji} size={18} /></span>
       <div className="discover-copy"><h3>{h.name}</h3><p>{h.about}</p><small>{Object.keys(h.members).length} {t('members').toLowerCase()} · {h.rooms.length} {t('rooms').toLowerCase()} · {t('hubCreatedBy', { name: db.users[h.ownerId]?.name ?? 'OrbitMc' })}</small></div>
       <button className="btn btn-outline btn-small" onClick={() => join(h)}><Icon name="plus" size={14} />{t('joinHub')}</button>
     </div>)}</div> : <p className="subtle-empty">{t('noPublicHubs')}</p>}
@@ -78,7 +77,7 @@ export function CreateHubModal({ open, onClose, user, onCreated }: { open: boole
   const { t } = useI18n();
   const [name, setName] = useState('');
   const [about, setAbout] = useState('');
-  const [emoji, setEmoji] = useState('✳');
+  const [emoji, setEmoji] = useState('icon:rocket');
   const [template, setTemplate] = useState<HubTemplateKey>('team');
   const [isPublic, setIsPublic] = useState(true);
   const [error, setError] = useState('');
@@ -86,7 +85,7 @@ export function CreateHubModal({ open, onClose, user, onCreated }: { open: boole
 
   const pickTemplate = (next: HubTemplateKey) => {
     setTemplate(next);
-    setEmoji(HUB_TEMPLATES[next].emoji);
+    setEmoji(next === 'team' ? 'icon:rocket' : next === 'friends' ? 'icon:music' : next === 'community' ? 'icon:globe' : 'icon:orbit');
   };
 
   const submit = async (e: FormEvent) => {
@@ -94,7 +93,8 @@ export function CreateHubModal({ open, onClose, user, onCreated }: { open: boole
     if (busy) return;
     setBusy(true);
     try {
-      const h = await makeHub({ userId: user.id, name, about, emoji, public: isPublic, template });
+      const safeMark = emoji.startsWith('icon:') ? '✳' : emoji;
+      const h = await makeHub({ userId: user.id, name, about, emoji: user.serverBacked ? safeMark : emoji, public: isPublic, template });
       onCreated(h);
       setName('');
       setAbout('');
@@ -107,20 +107,30 @@ export function CreateHubModal({ open, onClose, user, onCreated }: { open: boole
     {!user.serverBacked && <div className="field-label">{t('hubTemplate')}
       <div className="template-grid">
         {([
-          { id: 'team', label: t('templateTeam'), icon: '🚀' },
-          { id: 'friends', label: t('templateFriends'), icon: '🪩' },
-          { id: 'community', label: t('templateCommunity'), icon: '🌐' },
-          { id: 'blank', label: t('templateBlank'), icon: '✳' },
+          { id: 'team', label: t('templateTeam'), mark: 'icon:rocket' },
+          { id: 'friends', label: t('templateFriends'), mark: 'icon:music' },
+          { id: 'community', label: t('templateCommunity'), mark: 'icon:globe' },
+          { id: 'blank', label: t('templateBlank'), mark: 'icon:orbit' },
         ] as const).map((tpl) => (
           <button key={tpl.id} type="button" className={`template-chip ${template === tpl.id ? 'active' : ''}`} onClick={() => pickTemplate(tpl.id)}>
-            <span>{tpl.icon}</span><b>{tpl.label}</b><small>{HUB_TEMPLATES[tpl.id].rooms.map((r) => `#${r.name}`).join(' · ')}</small>
+            <span className="template-chip-icon"><HubSymbol mark={tpl.mark} size={18} /></span>
+            <b>{tpl.label}</b>
+            <small>{HUB_TEMPLATES[tpl.id].rooms.map((r) => `#${r.name}`).join(' · ')}</small>
           </button>
         ))}
       </div>
     </div>}
     <label className="field-label">{t('hubName')}<input className="field-input" autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.hubName} placeholder={t('hubName')} /></label>
     <label className="field-label">{t('hubAbout')}<textarea className="field-input field-textarea" value={about} onChange={(e) => setAbout(e.target.value)} maxLength={LIMITS.hubAbout} placeholder={t('hubAbout')} /></label>
-    <div className="field-label">{t('hubEmoji')}<div className="symbol-picker">{symbols.map((s, i) => <button key={`${s}${i}`} type="button" className={`symbol-option ${emoji === s ? 'picked' : ''}`} onClick={() => setEmoji(s)}>{s}</button>)}</div></div>
+    <div className="field-label">{t('hubEmoji')}
+      <div className="symbol-picker">
+        {HUB_ICON_OPTIONS.map((opt) => (
+          <button key={opt.key} type="button" title={opt.label} className={`symbol-option ${emoji === opt.key ? 'picked' : ''}`} onClick={() => setEmoji(opt.key)}>
+            <opt.Icon size={17} />
+          </button>
+        ))}
+      </div>
+    </div>
     <div className="field-label">{t('hubPrivacy')}<div className="segmented-choice"><button type="button" className={isPublic ? 'selected' : ''} onClick={() => setIsPublic(true)}>{t('publicHub')}</button><button type="button" className={!isPublic ? 'selected' : ''} onClick={() => setIsPublic(false)}>{t('privateHub')}</button></div></div>
     {error && <div className="inline-error" role="alert"><Icon name="info" size={15} />{error}</div>}
     <div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>{t('cancel')}</button><button type="submit" className="btn btn-primary" disabled={busy}>{busy ? t('loading') : <><Icon name="plus" size={15} />{t('create')}</>}</button></div>
@@ -142,8 +152,11 @@ export function HubSettingsModal({ open, onClose, hub, db, user }: { open: boole
 
   const saveGeneral = async (e: FormEvent) => {
     e.preventDefault();
-    try { await updateHub(hub.id, user.id, { name, about, emoji, public: isPublic }); tell(t('hubUpdated'), 'good'); }
-    catch (err) { report(err); }
+    try {
+      const safeMark = hub.remote && emoji.startsWith('icon:') ? hub.emoji : emoji;
+      await updateHub(hub.id, user.id, { name, about, emoji: safeMark, public: isPublic });
+      tell(t('hubUpdated'), 'good');
+    } catch (err) { report(err); }
   };
 
   const createNewRoom = async (e: FormEvent) => {
@@ -156,7 +169,7 @@ export function HubSettingsModal({ open, onClose, hub, db, user }: { open: boole
     } catch (err) { report(err); }
   };
 
-  return <Modal open={open} onClose={onClose} title={`${hub.emoji} ${hub.name}`} subtitle={t('hubSettings')} size="md">
+  return <Modal open={open} onClose={onClose} title={hub.name} subtitle={t('hubSettings')} size="md">
     <div className="hub-manage-tabs">
       <button type="button" className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>{t('overview')}</button>
       <button type="button" className={tab === 'rooms' ? 'active' : ''} onClick={() => setTab('rooms')}>{t('rooms')} ({hub.rooms.length})</button>
@@ -166,7 +179,15 @@ export function HubSettingsModal({ open, onClose, hub, db, user }: { open: boole
     {tab === 'general' && <form className="stack-form" onSubmit={saveGeneral}>
       <label className="field-label">{t('hubName')}<input className="field-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.hubName} /></label>
       <label className="field-label">{t('hubAbout')}<textarea className="field-input field-textarea" value={about} onChange={(e) => setAbout(e.target.value)} maxLength={LIMITS.hubAbout} /></label>
-      <div className="field-label">{t('hubEmoji')}<div className="symbol-picker">{symbols.map((s, i) => <button key={`${s}${i}`} type="button" className={`symbol-option ${emoji === s ? 'picked' : ''}`} onClick={() => setEmoji(s)}>{s}</button>)}</div></div>
+      {!hub.remote && <div className="field-label">{t('hubEmoji')}
+        <div className="symbol-picker">
+          {HUB_ICON_OPTIONS.map((opt) => (
+            <button key={opt.key} type="button" title={opt.label} className={`symbol-option ${emoji === opt.key ? 'picked' : ''}`} onClick={() => setEmoji(opt.key)}>
+              <opt.Icon size={17} />
+            </button>
+          ))}
+        </div>
+      </div>}
       <div className="field-label">{t('hubPrivacy')}<div className="segmented-choice"><button type="button" className={isPublic ? 'selected' : ''} onClick={() => setIsPublic(true)}>{t('publicHub')}</button><button type="button" className={!isPublic ? 'selected' : ''} onClick={() => setIsPublic(false)}>{t('privateHub')}</button></div></div>
       <div className="modal-actions">
         <button type="button" className="btn btn-outline btn-small" onClick={async () => { const url = `${window.location.origin}/invite/${hub.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={14} />{t('inviteCopy')}</button>
@@ -239,7 +260,7 @@ export function PeoplePage({ db, user, onChat }: { db: DB; user: User; onChat: (
   const others = useMemo(() => Object.values(db.users).filter((p) => (p.serverBacked || (!p.bot && p.id !== 'orbit-studio')) && p.id !== user.id && `${p.name} ${p.username}`.toLowerCase().includes(q.toLowerCase())), [db.users, user.id, q]);
   return <div className="page-content people-page">
     <div className="page-heading"><div><div className="eyebrow">{t('goodPeople')}</div><h1>{t('people')}</h1><p>{t('welcomeSub')}</p></div><label className="page-search"><Icon name="search" size={17} /><input placeholder={t('search')} value={q} onChange={(e) => setQ(e.target.value)} /></label></div>
-    {others.length ? <div className="people-list">{others.map((p) => <button key={p.id} className="person-card" onClick={() => onChat(p.id)}><Avatar user={p} size="lg" showStatus /><div className="person-card-info"><h3>{p.name}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</h3><small>@{p.username}</small><p>{p.statusText || p.bio || t('welcomeSub')}</p></div><span className="person-presence"><i className={`status-mini status-${p.presence}`} />{t(p.presence)}</span><Icon name="chevron" size={16} /></button>)}</div> : <div className="inline-empty"><div className="empty-mark">◎</div><p>{t('noPeople')}</p></div>}
+    {others.length ? <div className="people-list">{others.map((p) => <button key={p.id} className="person-card" onClick={() => onChat(p.id)}><Avatar user={p} size="lg" showStatus /><div className="person-card-info"><h3>{p.name}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</h3><small>@{p.username}</small><p>{p.statusText || p.bio || t('welcomeSub')}</p></div><span className="person-presence"><i className={`status-mini status-${p.presence}`} />{t(p.presence)}</span><Icon name="chevron" size={16} /></button>)}</div> : <div className="inline-empty"><div className="empty-mark"><HubSymbol mark="icon:users" size={20} /></div><p>{t('noPeople')}</p></div>}
     <p className="demo-helper">{t('demoNote')}</p>
   </div>;
 }

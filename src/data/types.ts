@@ -22,6 +22,8 @@ export interface User {
   profileStroke?: string;
   profileTags?: string[];
   profileTemplate?: 'clean' | 'halo' | 'frame';
+  chatFont?: 'sans' | 'display' | 'mono' | 'serif';
+  messageEffect?: 'none' | 'glow' | 'aurora' | 'ember';
   presence: Presence;
   statusText: string;
   createdAt: number;

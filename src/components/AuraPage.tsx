@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { AURA, FREE } from '../config';
+import { ExternalLink, Lock, Sparkles } from 'lucide-react';
+import { AURA, FREE, STUDIO_URL } from '../config';
 import type { AuraTier, User } from '../data/types';
 import { cancelAura, getAura, hasAura, subscribeAura } from '../data/market';
 import { useI18n } from '../i18n';
@@ -23,6 +24,7 @@ export function AuraPage({ user }: { user: User }) {
   const renewalOff = active && !!sub && sub.renews < 0;
   const tier = sub?.tier;
   const plan = tier ? AURA[tier] : null;
+  const studioHref = `${STUDIO_URL}?tier=${activeSub?.tier ?? 'none'}&user=${encodeURIComponent(user.username)}`;
 
   const subscribe = () => {
     if (!selectPlan) return;
@@ -49,7 +51,7 @@ export function AuraPage({ user }: { user: User }) {
         <p>{t('auraSub')}</p>
         <div className="aura-demo-stamp"><Icon name="spark" size={14} />{t('previewPassNote')}</div>
       </div>
-      <div className="aura-medallion"><span className="medallion-orbit orbit-outer" /><span className="medallion-orbit orbit-inner" /><span className="medallion-center"><Icon name="spark" size={32} /></span><i className="medallion-star">✳</i><i className="medallion-star star-two">✳</i></div>
+      <div className="aura-medallion"><span className="medallion-orbit orbit-outer" /><span className="medallion-orbit orbit-inner" /><span className="medallion-center"><Icon name="spark" size={32} /></span></div>
       <span className="aura-serial">O+M<br />PRO</span>
     </div>
 
@@ -65,6 +67,25 @@ export function AuraPage({ user }: { user: User }) {
       {active && renewalOff && <button className="btn btn-outline btn-small" onClick={() => { subscribeAura(user.id, sub!.tier, sub!.cycle); tell(t('subscriptionThanks'), 'good'); }}>{t('resumePlan')}</button>}
       {ended && <button className="btn btn-primary btn-small" onClick={() => setSelectPlan(sub.tier)}>{t('changePlan')}</button>}
     </section>}
+
+    <div className="studio-platform-card">
+      <div className="studio-platform-copy">
+        <span className="pill-mini"><Sparkles size={11} /> ORBIT+ STUDIO</span>
+        <h3>{t('studioPlatform')}</h3>
+        <p>{t('studioPlatformSub')}</p>
+      </div>
+      {active ? (
+        <a className="btn btn-primary" href={studioHref} target="_blank" rel="noopener noreferrer">
+          <span>{t('openStudioPlatform')}</span>
+          <ExternalLink size={15} />
+        </a>
+      ) : (
+        <button type="button" className="btn btn-outline" onClick={() => setSelectPlan('flare')}>
+          <Lock size={14} />
+          <span>{t('activatePreviewPass')}</span>
+        </button>
+      )}
+    </div>
 
     <section className="pro-showcase-section">
       <div className="plan-section-head"><div><span className="eyebrow">ORBIT+ PRO</span><h2>{t('proFeaturesTitle')}</h2></div></div>
@@ -131,7 +152,7 @@ export function AuraPage({ user }: { user: User }) {
           <tr><td>{t('hubs')}</td><td>{FREE.hubs}</td><td>{AURA.ember.hubs}</td><td>{AURA.flare.hubs}</td><td>{AURA.nova.hubs}</td></tr>
           <tr><td>{t('yourSparks')} / {t('aMonth')}</td><td>{FREE.daily}</td><td>{AURA.ember.stipend}</td><td>{AURA.flare.stipend}</td><td>{AURA.nova.stipend}</td></tr>
           <tr><td>{t('perkZeroFee', { fee: '%' })}</td><td>15%</td><td>10%</td><td>5%</td><td>0%</td></tr>
-          <tr><td>{t('perkAnimatedFrames')}</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
+          <tr><td>{t('studioPlatform')}</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
         </tbody>
       </table>
     </section>

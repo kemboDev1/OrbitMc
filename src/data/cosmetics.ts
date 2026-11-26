@@ -8,6 +8,12 @@ export interface UserCosmetics {
   accent: string | null;
   aura: AuraSub | null;
   isAdmin?: boolean;
+  chatFont?: 'sans' | 'display' | 'mono' | 'serif';
+  messageEffect?: 'none' | 'glow' | 'aurora' | 'ember';
+  banner?: string;
+  profileStroke?: string;
+  profileTags?: string[];
+  profileTemplate?: 'clean' | 'halo' | 'frame';
 }
 
 type CosmeticsMap = Record<ID, UserCosmetics>;

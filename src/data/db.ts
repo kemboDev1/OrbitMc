@@ -7,7 +7,7 @@ import type { DB, User } from './types';
 const record = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown, max = 10_000): v is string => typeof v === 'string' && v.length <= max;
 const idKey = (v: string) => /^[a-z0-9:_-]{1,100}$/i.test(v);
-const image = (v: unknown, max: number) => v === undefined || v === null || (typeof v === 'string' && v.length <= max && /^data:image\/(?:jpeg|gif);base64,[A-Za-z0-9+/=]+$/.test(v));
+const image = (v: unknown, max: number) => v === undefined || v === null || (typeof v === 'string' && v.length <= max && (/^grad:[a-z0-9_-]{2,32}$/i.test(v) || /^data:image\/(?:jpeg|gif);base64,[A-Za-z0-9+/=]+$/.test(v)));
 const hex = (v: unknown): v is string => typeof v === 'string' && /^#[\da-f]{6}$/i.test(v);
 
 function validDB(x: unknown): x is DB {

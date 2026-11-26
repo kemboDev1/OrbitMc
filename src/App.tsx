@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Crown, ExternalLink, Sparkles, Tag } from 'lucide-react';
 import type { Hub, User } from './data/types';
 import { db } from './data/db';
 import { session } from './data/session';
@@ -23,13 +24,15 @@ import { ChatScreen } from './components/ChatScreen';
 import { HubPage, CreateHubModal, PeoplePage } from './components/HubPages';
 import { BazaarPage } from './components/BazaarPage';
 import { AuraPage } from './components/AuraPage';
-import { SettingsPage } from './components/SettingsPage';
+import { SettingsPage, bannerStyleFor } from './components/SettingsPage';
 import { AdminPage } from './components/AdminPage';
 import { SearchModal } from './components/SearchModal';
 import { Modal } from './components/Modal';
 import { ToastHost, tell } from './components/Toast';
 import { isDesktop } from './lib/electron';
 import { useChatControls } from './data/chatControls';
+import { HubSymbol } from './components/VectorAssets';
+import { STUDIO_URL } from './config';
 
 export type View = 'chats' | 'hubs' | 'bazaar' | 'aura' | 'people' | 'settings' | 'admin';
 type ChatFolder = 'all' | 'direct' | 'hubs' | 'unread';
@@ -205,7 +208,22 @@ export default function App() {
   const newHub = () => setNewHubOpen(true);
   const markSignedOut = () => { setChannel(null); setView('chats'); setProfileMenu(false); setMobileListOpen(false); };
 
-  if (!authReady) return <main className="app-loading" role="status">{t('loading')}</main>;
+  if (!authReady) {
+    return (
+      <main className="app-loading" role="status">
+        <div className="loader-card">
+          <div className="loader-orbit">
+            <span className="loader-ring ring-a" />
+            <span className="loader-ring ring-b" />
+            <BrandMark large />
+          </div>
+          <strong>ORBITMC</strong>
+          <p>{t('loading')}</p>
+          <div className="loader-bar"><i /></div>
+        </div>
+      </main>
+    );
+  }
   if (!user) return <>{restoreError && <div className="restore-notice" role="alert">{restoreError}</div>}{authOpen || isDesktop() || isStandalone() ? <AuthScreen initial="signin" onCancel={isDesktop() || isStandalone() ? undefined : () => setAuthOpen(false)} onDone={() => { setRestoreError(''); setAuthOpen(false); setView('chats'); setChannel(null); }} /> : <LandingPage onEnter={openAuth} />}<ToastHost /></>;
 
   const report = (error: unknown) => tell(error instanceof AppError ? t(error.key) : t('err.generic'), 'bad');
@@ -220,6 +238,8 @@ export default function App() {
   const visibleDms = folder === 'hubs' ? [] : folder === 'unread' ? recentDms.filter((x) => x.unseen) : recentDms;
   const visibleHubs = folder === 'direct' ? [] : joinedHubs;
   const unreadCount = recentDms.filter((x) => x.unseen).length;
+  const userIsPro = hasAura(user.id);
+  const studioHref = `${STUDIO_URL}?tier=${user.aura?.tier ?? 'none'}&user=${encodeURIComponent(user.username)}`;
 
   const nav = (item: { key: View; icon: IconName }, compact = false) => (
     <button key={item.key} aria-label={t(item.key)} title={compact ? t(item.key) : undefined} className={`nav-link ${view === item.key ? 'active' : ''} ${compact ? 'rail-link' : ''}`} onClick={() => toView(item.key)}>
@@ -289,11 +309,11 @@ export default function App() {
             const members = Object.keys(h.members).map((id) => data.users[id]).filter(Boolean);
             return <div className={`hub-side-row ${active ? 'selected' : ''}`} key={h.id}>
               <button className="hub-side-main" onClick={() => openHub(h)}>
-                <span className="hub-side-symbol" style={{ '--hub-hue': h.hue } as React.CSSProperties}>{h.emoji}</span>
+                <span className="hub-side-symbol" style={{ '--hub-hue': h.hue } as React.CSSProperties}><HubSymbol mark={h.emoji} size={15} /></span>
                 <span className="hub-side-copy"><b>{h.name}</b><small>{members.filter((p) => p.presence === 'online').length} {t('onlineNow')} · {h.rooms.length} {t('rooms').toLowerCase()}</small></span>
                 <Icon name="chevron" size={14} />
               </button>
-              {active && <div className="hub-side-rooms">{h.rooms.slice(0, 5).map((room) => <button key={room.id} className={`hub-room-short ${channel === room.id ? 'active' : ''}`} onClick={() => { setChannel(room.id); setMobileListOpen(false); }}><span>{room.kind === 'broadcast' ? '📢' : '#'}</span>{room.name}</button>)}{h.rooms.length > 5 && <button className="hub-room-short" onClick={() => openHub(h)}><span>···</span>{h.rooms.length - 5}+</button>}</div>}
+              {active && <div className="hub-side-rooms">{h.rooms.slice(0, 5).map((room) => <button key={room.id} className={`hub-room-short ${channel === room.id ? 'active' : ''}`} onClick={() => { setChannel(room.id); setMobileListOpen(false); }}><span>{room.kind === 'broadcast' ? <Icon name="megaphone" size={11} /> : '#'}</span>{room.name}</button>)}{h.rooms.length > 5 && <button className="hub-room-short" onClick={() => openHub(h)}><span>···</span>{h.rooms.length - 5}+</button>}</div>}
             </div>;
           })}
           {visibleHubs.length === 0 && <button className="side-empty-link" onClick={() => toView('hubs')}>{t('noHubs')} <Icon name="arrowUpRight" size={13} /></button>}
@@ -328,7 +348,7 @@ export default function App() {
       </nav>
     </main>
 
-    {profileMenu && <><button className="menu-dismiss" aria-label={t('cancel')} onClick={() => setProfileMenu(false)} /><div className="account-popover"><div className="account-popover-head"><Avatar user={user} size="md" /><span><b>{user.name}</b><small>@{user.username}</small></span><span className="account-plan">{hasAura(user.id) ? <Icon name="spark" size={12} /> : null}{hasAura(user.id) ? user.aura?.tier.toUpperCase() : t('auraFree')}</span></div><div className="status-editor"><label className="field-label">{t('setStatus')}<input className="field-input" value={statusDraft} maxLength={60} placeholder={t('statusPlaceholder')} onChange={(e) => setStatusDraft(e.target.value)} /></label><div><button className="text-action" disabled={presenceBusy} onClick={() => { void Promise.resolve(setPresence(user.id, user.presence, statusDraft)).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('applyStatus')}</button><button className="text-action" disabled={presenceBusy} onClick={() => { setStatusDraft(''); void Promise.resolve(setPresence(user.id, user.presence, '')).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('clearStatus')}</button></div></div><div className="presence-picker"><span>{t('setPresence')}</span>{(['online', 'idle', 'dnd', 'offline'] as User['presence'][]).map((p) => <button key={p} className={user.presence === p ? 'active' : ''} disabled={presenceBusy} onClick={() => { void changePresence(p); }}><i className={`status-mini status-${p}`} />{t(p)}{user.presence === p && <Icon name="check" size={13} />}</button>)}</div><div className="account-popover-links"><button onClick={() => { setProfileMenu(false); setProfileTarget(user.id); }}><Icon name="people" size={15} />{t('myProfile')}</button><button onClick={() => { setProfileMenu(false); toView('settings'); }}><Icon name="gear" size={15} />{t('settings')}</button><button onClick={() => { setProfileMenu(false); toView('aura'); }}><Icon name="spark" size={15} />{t('aura')}</button>{adminVisible && <button onClick={() => { setProfileMenu(false); toView('admin'); }}><Icon name="shield" size={15} />{t('admin')}</button>}<button className="signout-action" onClick={() => { void signOutNow(); }}><Icon name="back" size={15} />{t('signOut')}</button></div></div></>}
+    {profileMenu && <><button className="menu-dismiss" aria-label={t('cancel')} onClick={() => setProfileMenu(false)} /><div className="account-popover"><div className="account-popover-head"><Avatar user={user} size="md" /><span><b>{user.name}</b><small>@{user.username}</small></span><span className="account-plan">{userIsPro ? <Icon name="spark" size={12} /> : null}{userIsPro ? user.aura?.tier.toUpperCase() : t('auraFree')}</span></div><div className="status-editor"><label className="field-label">{t('setStatus')}<input className="field-input" value={statusDraft} maxLength={60} placeholder={t('statusPlaceholder')} onChange={(e) => setStatusDraft(e.target.value)} /></label><div><button className="text-action" disabled={presenceBusy} onClick={() => { void Promise.resolve(setPresence(user.id, user.presence, statusDraft)).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('applyStatus')}</button><button className="text-action" disabled={presenceBusy} onClick={() => { setStatusDraft(''); void Promise.resolve(setPresence(user.id, user.presence, '')).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('clearStatus')}</button></div></div><div className="presence-picker"><span>{t('setPresence')}</span>{(['online', 'idle', 'dnd', 'offline'] as User['presence'][]).map((p) => <button key={p} className={user.presence === p ? 'active' : ''} disabled={presenceBusy} onClick={() => { void changePresence(p); }}><i className={`status-mini status-${p}`} />{t(p)}{user.presence === p && <Icon name="check" size={13} />}</button>)}</div><div className="account-popover-links"><button onClick={() => { setProfileMenu(false); setProfileTarget(user.id); }}><Icon name="people" size={15} />{t('myProfile')}</button><button onClick={() => { setProfileMenu(false); toView('settings'); }}><Icon name="gear" size={15} />{t('settings')}</button><button onClick={() => { setProfileMenu(false); toView('aura'); }}><Icon name="spark" size={15} />{t('aura')}</button>{userIsPro && <button onClick={() => { setProfileMenu(false); window.open(studioHref, '_blank', 'noopener,noreferrer'); }}><ExternalLink size={15} />{t('studioPlatform')}</button>}{adminVisible && <button onClick={() => { setProfileMenu(false); toView('admin'); }}><Icon name="shield" size={15} />{t('admin')}</button>}<button className="signout-action" onClick={() => { void signOutNow(); }}><Icon name="back" size={15} />{t('signOut')}</button></div></div></>}
 
     <Modal open={newChatOpen} onClose={() => setNewChatOpen(false)} title={t('newMessage')} subtitle={t('welcomeSub')} size="sm"><div className="new-chat-list"><label className="mini-search"><Icon name="search" size={15} /><input autoFocus placeholder={t('search')} onChange={(e) => { const q = e.target.value.toLowerCase(); document.querySelectorAll<HTMLButtonElement>('.new-chat-contact').forEach((el) => { el.hidden = !el.dataset.search?.includes(q); }); }} /></label>{contacts.map((p) => <button className="new-chat-contact" data-search={`${p.name} ${p.username}`.toLowerCase()} key={p.id} onClick={() => pickUser(p)}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}</b><small>@{p.username}</small></span><Icon name="arrowUpRight" size={15} /></button>)}{contacts.length === 0 && <p className="modal-demo-note">{t('noPeople')}</p>}</div></Modal>
 
@@ -337,7 +357,21 @@ export default function App() {
     <Modal open={inviteOpen} onClose={() => setInviteOpen(false)} title={t('invite')} subtitle={t('pasteInvite')} size="sm"><form className="stack-form" onSubmit={async (e) => { e.preventDefault(); try { const token = inviteValue.trim().split('/').filter(Boolean).at(-1) ?? ''; const h = await joinInvite(token, user.id); if (!h) throw new AppError('err.inviteInvalid'); setInviteOpen(false); setInviteValue(''); openHub(h); tell(t('hubJoined'), 'good'); } catch (err) { tell(err instanceof AppError ? t(err.key) : t('err.generic'), 'bad'); } }}><p className="modal-explainer">{t(user.serverBacked ? 'inviteLiveNotice' : 'inviteLocalNotice')}</p><label className="field-label">{t('invite')}<input autoFocus className="field-input" value={inviteValue} onChange={(e) => setInviteValue(e.target.value)} placeholder={t('invitePlaceholder')} /></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setInviteOpen(false)}>{t('cancel')}</button><button type="submit" className="btn btn-primary"><Icon name="arrowUpRight" size={14} />{t('joinHub')}</button></div></form></Modal>
 
     <SearchModal db={data} user={user} blockedUsers={chatControls.blocked} onSelect={(id) => { setChannel(id); setView('chats'); setMobileListOpen(false); }} />
-    <Modal open={!!profileTarget} onClose={() => setProfileTarget(null)} title={t('profile')} subtitle={profileTarget ? `@${data.users[profileTarget]?.username ?? ''}` : ''} size="sm">{profileTarget && data.users[profileTarget] && <div className="profile-modal-card"><div className="profile-modal-cover" style={{ '--cover-hue': data.users[profileTarget].hue } as React.CSSProperties} /><Avatar user={data.users[profileTarget]} size="xl" showStatus /><h2>{data.users[profileTarget].name}{hasAura(data.users[profileTarget].id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}{data.users[profileTarget].isAdmin && <span className="admin-tag">{t('admin')}</span>}</h2><p>@{data.users[profileTarget].username}</p>{data.users[profileTarget].bio && <p>{data.users[profileTarget].bio}</p>}{data.users[profileTarget].statusText && <p className="profile-status">“{data.users[profileTarget].statusText}”</p>}{hasAura(data.users[profileTarget].id) && <span className="profile-plan"><Icon name="check" size={13} />{t('profilePlanLabel', { plan: data.users[profileTarget].aura?.tier.toUpperCase() ?? 'ORBIT+' })}</span>}<div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(data.users[profileTarget].createdAt) })}</span>{data.users[profileTarget].inventory.length > 0 && <span>{t('collectionCount', { count: data.users[profileTarget].inventory.length })}</span>}{(data.users[profileTarget].giftsReceivedCount ?? data.users[profileTarget].giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: data.users[profileTarget].giftsReceivedCount ?? data.users[profileTarget].giftsReceived?.length ?? 0 })}</span>}</div>{profileTarget === user.id ? <button className="btn btn-outline btn-full" onClick={() => { setProfileTarget(null); toView('settings'); }}><Icon name="edit" size={15} />{t('editProfile')}</button> : <button className="btn btn-primary btn-full" onClick={() => { pickUser(data.users[profileTarget]); setProfileTarget(null); }}><Icon name="chat" size={15} />{t('dmFrom')}</button>}</div>}</Modal>
+    <Modal open={!!profileTarget} onClose={() => setProfileTarget(null)} title={t('profile')} subtitle={profileTarget ? `@${data.users[profileTarget]?.username ?? ''}` : ''} size="sm">{profileTarget && data.users[profileTarget] && (() => {
+      const targetUser = data.users[profileTarget];
+      const targetPro = hasAura(targetUser.id);
+      return <div className={`profile-modal-card tpl-${targetUser.profileTemplate ?? 'halo'}`}>
+        <div className="profile-modal-cover" style={bannerStyleFor(targetUser)} />
+        <Avatar user={targetUser} size="xl" showStatus />
+        <h2 className={targetPro && targetUser.chatFont ? `font-${targetUser.chatFont}` : ''}>{targetUser.name}{targetPro && <span className={`pro-flex-pill tier-${targetUser.aura?.tier ?? 'ember'}`}>{targetUser.aura?.tier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}{targetUser.aura?.tier === 'nova' ? 'NOVA MAX' : 'ORBIT+'}</span>}{targetUser.isAdmin && <span className="admin-tag">{t('admin')}</span>}</h2>
+        <p>@{targetUser.username}</p>
+        {targetUser.bio && <p>{targetUser.bio}</p>}
+        {targetUser.statusText && <p className="profile-status">“{targetUser.statusText}”</p>}
+        {!!targetUser.profileTags?.length && <div className="tag-chips-list center">{targetUser.profileTags.map((tag) => <span key={tag} className="profile-custom-tag"><Tag size={10} />{tag}</span>)}</div>}
+        <div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(targetUser.createdAt) })}</span>{targetUser.inventory.length > 0 && <span>{t('collectionCount', { count: targetUser.inventory.length })}</span>}{(targetUser.giftsReceivedCount ?? targetUser.giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: targetUser.giftsReceivedCount ?? targetUser.giftsReceived?.length ?? 0 })}</span>}</div>
+        {profileTarget === user.id ? <button className="btn btn-outline btn-full" onClick={() => { setProfileTarget(null); toView('settings'); }}><Icon name="edit" size={15} />{t('editProfile')}</button> : <button className="btn btn-primary btn-full" onClick={() => { pickUser(targetUser); setProfileTarget(null); }}><Icon name="chat" size={15} />{t('dmFrom')}</button>}
+      </div>;
+    })()}</Modal>
     <ToastHost />
   </div>;
 }

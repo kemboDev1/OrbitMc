@@ -3,6 +3,8 @@ import type { AuraTier } from './data/types';
 /** Rename the product here. */
 export const BRAND = 'OrbitMc';
 
+export const STUDIO_URL = import.meta.env?.VITE_STUDIO_URL?.trim() || 'https://orbit-studio-platform.vercel.app';
+
 export const LIMITS = {
   message: 2000,
   messageNova: 4000,
@@ -78,9 +80,20 @@ export const AURA: Record<AuraTier, {
   },
 };
 
-export const FREE = { hubs: 10, fee: 0.15, daily: 25, startSparks: 300 };
+export const FREE = { hubs: 3, fee: 0.15, daily: 25, startSparks: 300 };
 
 export const ACCENTS = ['#ff5b2e', '#37d39b', '#8f7dff', '#3aa8ff', '#ffc233', '#ff4d7e'];
+
+export const BANNER_GRADIENTS: { id: string; label: string; css: string }[] = [
+  { id: 'grad:cosmic', label: 'Cosmic', css: 'linear-gradient(135deg, #1b1536 0%, #3b2667 48%, #bc4e4e 100%)' },
+  { id: 'grad:sunset', label: 'Sunset', css: 'linear-gradient(135deg, #3b1710 0%, #c94b2c 52%, #f09c42 100%)' },
+  { id: 'grad:aurora', label: 'Aurora', css: 'linear-gradient(135deg, #0b2429 0%, #165e63 50%, #5e43b8 100%)' },
+  { id: 'grad:emerald', label: 'Emerald', css: 'linear-gradient(135deg, #0c2119 0%, #1a5941 55%, #37d39b 100%)' },
+  { id: 'grad:obsidian', label: 'Obsidian', css: 'linear-gradient(135deg, #12141c 0%, #242938 55%, #46506e 100%)' },
+];
+
+export const CHAT_FONTS = ['sans', 'display', 'mono', 'serif'] as const;
+export const MESSAGE_EFFECTS = ['none', 'glow', 'aurora', 'ember'] as const;
 
 export const SESSION_MS = 12 * 60 * 60 * 1000;
 export const REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;

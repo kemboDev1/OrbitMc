@@ -1,24 +1,29 @@
+import { Crown, Sparkles } from 'lucide-react';
 import { hueOf, initials } from '../lib/util';
 import { db } from '../data/db';
 import { hasAura } from '../data/market';
 import type { User } from '../data/types';
-import { Icon } from './Icons';
 
 export function Avatar({ user, size = 'md', showStatus = false }: { user?: User | null; size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'; showStatus?: boolean }) {
   if (!user) return <div className={`avatar avatar-${size} avatar-blank`} aria-hidden="true">?</div>;
-  const color = user.accent ?? `hsl(${user.hue || hueOf(user.username)} 40% 42%)`;
+  const color = user.accent ?? `hsl(${user.hue || hueOf(user.username)} 46% 44%)`;
   const frame = user.frame ? db.get().listings[user.frame]?.frame : undefined;
+  const isMax = hasAura(user.id) && user.aura?.tier === 'nova';
   const avatarStyle = {
     ...(frame ? { '--frame-a': frame.colors[0], '--frame-b': frame.colors[1] ?? frame.colors[0] } : {}),
     ...(user.profileStroke ? { '--profile-stroke': user.profileStroke } : {}),
   } as React.CSSProperties;
   return (
-    <span className={`avatar-wrap avatar-wrap-${size} ${user.profileStroke ? 'avatar-has-stroke' : ''} ${frame ? 'avatar-framed' : ''} ${frame?.spin ? '' : 'avatar-frame-static'}`} style={avatarStyle}>
+    <span className={`avatar-wrap avatar-wrap-${size} ${user.profileStroke ? 'avatar-has-stroke' : ''} ${frame ? 'avatar-framed' : ''} ${frame?.spin ? 'avatar-frame-pulse' : ''}`} style={avatarStyle}>
       <span className={`avatar avatar-${size}`} style={{ backgroundColor: user.avatar ? undefined : color }}>
         {user.avatar ? <img src={user.avatar} alt="" loading="lazy" decoding="async" /> : initials(user.name)}
       </span>
       {showStatus && <i className={`status-dot status-${user.presence}`} />}
-      {hasAura(user.id) && size !== 'xs' && <span className="aura-tiny"><Icon name="spark" size={9} /></span>}
+      {hasAura(user.id) && size !== 'xs' && (
+        <span className={`aura-tiny ${isMax ? 'is-max' : ''}`}>
+          {isMax ? <Crown size={9} strokeWidth={2.4} /> : <Sparkles size={9} strokeWidth={2.4} />}
+        </span>
+      )}
     </span>
   );
 }

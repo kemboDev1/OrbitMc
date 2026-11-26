@@ -1,18 +1,19 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { ExternalLink, Lock, Sparkles } from 'lucide-react';
 import type { DB, Listing, ListingKind, User } from '../data/types';
 import { buyListing, claimDaily, createListing, equipListing, getAura, giftListing, hasAura, removeListing } from '../data/market';
 import { useI18n } from '../i18n';
 import { AppError } from '../data/errors';
-import { AURA, LIMITS } from '../config';
+import { AURA, LIMITS, STUDIO_URL } from '../config';
 import { Avatar } from './Avatar';
 import { Icon } from './Icons';
 import { Modal } from './Modal';
 import { tell } from './Toast';
 import { useChatControls } from '../data/chatControls';
+import { VECTOR_BADGES, VectorBadge } from './VectorAssets';
 
 const hues = ['#ff5b2e', '#e7aa56', '#e95f87', '#8f7dff', '#3aa8ff', '#37d39b', '#d2bd85', '#314c6b'];
-const stickerPalette = ['🚀', '✨', '🔥', '🫶', '🪩', '🌙', '⚡', '🎧', '🫧', '🪐', '💎', '🦋', '🌱', '🎯', '🏆', '☕', '👾', '🤍', '🥹', '👀', '🙌', '🌈', '🍓', '🧸'];
 
 const themePresets = [
   { name: 'Cosmic', dark: true, bg: '#0c0e17', panel: '#131624', raised: '#1b2033', line: '#2a314c', accent: '#8f7dff' },
@@ -83,6 +84,8 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
     catch (e) { report(e); }
   };
 
+  const studioHref = `${STUDIO_URL}?tier=${aura?.tier ?? 'none'}&user=${encodeURIComponent(user.username)}`;
+
   return <div className="page-content market-page">
     <div className="market-heading">
       <div className="market-copy"><div className="eyebrow">{t('marketEyebrow')}</div><h1>{t('marketTitle')}</h1><p>{t('marketSub')}</p></div>
@@ -93,6 +96,26 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
       </div>
     </div>
     <p className="local-feature-note">{t(user.serverBacked ? 'marketLiveNotice' : 'marketLocalNotice')}</p>
+
+    <div className="studio-platform-card">
+      <div className="studio-platform-copy">
+        <span className="pill-mini"><Sparkles size={11} /> ORBIT+ STUDIO</span>
+        <h3>{t('studioPlatform')}</h3>
+        <p>{t('studioPlatformSub')}</p>
+      </div>
+      {aura ? (
+        <a className="btn btn-primary" href={studioHref} target="_blank" rel="noopener noreferrer">
+          <span>{t('openStudioPlatform')}</span>
+          <ExternalLink size={15} />
+        </a>
+      ) : (
+        <button type="button" className="btn btn-outline" onClick={() => { tell(t('studioSubRequired'), 'info'); window.dispatchEvent(new CustomEvent('orbit:nav', { detail: 'aura' })); }}>
+          <Lock size={14} />
+          <span>{t('aura')}</span>
+        </button>
+      )}
+    </div>
+
     <div className="market-tools">
       <div className="market-tabs">{(['all', 'theme', 'frame', 'stickers', 'owned', 'made'] as Kind[]).map((k) => <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>{k === 'all' ? t('allItems') : k === 'owned' ? t('bag') : k === 'made' ? t('yourShop') : t(k === 'theme' ? 'themes' : k === 'frame' ? 'frames' : 'stickers')}</button>)}</div>
       <div className="market-filters">
@@ -110,8 +133,19 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
       const isOwned = user.inventory.includes(l.id) || l.sellerId === user.id;
       const isInUse = user.theme === l.id || user.frame === l.id || user.stickerPack === l.id;
       return <article className="product-card" key={l.id} style={{ '--product-order': index } as React.CSSProperties}>
-        <button className={`product-art art-${l.kind} art-${l.id.replace(/[^a-z0-9]/gi, '-')}`} style={{ '--product-hue': l.theme?.accent ?? l.frame?.colors[0] ?? (l.kind === 'stickers' ? '#f5e5d8' : '#f1ded6') } as React.CSSProperties} onClick={() => isOwned ? useItem(l) : buy(l)} aria-label={`${listingName}, ${l.price} ${t('sparks')}`}>
-          {l.kind === 'stickers' ? <div className="sticker-preview">{l.stickers?.slice(0, 6).map((x, i) => <span className={`sticker-pos sticker-pos-${i + 1}`} key={`${x}${i}`}>{x}</span>)}</div> : l.kind === 'theme' ? <div className="theme-preview" style={{ '--preview-bg': l.theme?.bg, '--preview-panel': l.theme?.panel, '--preview-raised': l.theme?.raised, '--preview-line': l.theme?.line, '--preview-accent': l.theme?.accent } as React.CSSProperties}><span className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></span><span className="theme-name-preview">{listingName}</span></div> : <div className="frame-preview"><span className={`frame-orbit ${l.frame?.spin ? 'spin' : ''}`} style={{ '--frame-a': l.frame?.colors[0], '--frame-b': l.frame?.colors[1] ?? l.frame?.colors[0] } as React.CSSProperties} /><span className="frame-face" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : undefined }}>{user.avatar ? '' : user.name.slice(0, 1).toUpperCase()}</span><span className="frame-stars">✳</span></div>}
+        <button className={`product-art art-${l.kind} art-${l.id.replace(/[^a-z0-9]/gi, '-')}`} style={{ '--product-hue': l.theme?.accent ?? l.frame?.colors[0] ?? (l.kind === 'stickers' ? '#252236' : '#f1ded6') } as React.CSSProperties} onClick={() => isOwned ? useItem(l) : buy(l)} aria-label={`${listingName}, ${l.price} ${t('sparks')}`}>
+          {l.kind === 'stickers' ? (
+            <div className="sticker-preview vector-pack-preview">
+              {l.stickers?.slice(0, 6).map((x, i) => <span className={`sticker-pos sticker-pos-${i + 1}`} key={`${x}${i}`}><VectorBadge id={x} size="md" /></span>)}
+            </div>
+          ) : l.kind === 'theme' ? (
+            <div className="theme-preview" style={{ '--preview-bg': l.theme?.bg, '--preview-panel': l.theme?.panel, '--preview-raised': l.theme?.raised, '--preview-line': l.theme?.line, '--preview-accent': l.theme?.accent } as React.CSSProperties}><span className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></span><span className="theme-name-preview">{listingName}</span></div>
+          ) : (
+            <div className="frame-preview-clean">
+              <span className={`frame-halo-ring ${l.frame?.spin ? 'pulse' : ''}`} style={{ '--frame-a': l.frame?.colors[0], '--frame-b': l.frame?.colors[1] ?? l.frame?.colors[0] } as React.CSSProperties} />
+              <span className="frame-face-clean" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : undefined }}>{user.avatar ? '' : user.name.slice(0, 1).toUpperCase()}</span>
+            </div>
+          )}
           {l.featured && <span className="product-featured-tag"><Icon name="spark" size={10} /> {t('featuredBadge')}</span>}
           {l.auraOnly && <span className="product-aura-tag"><Icon name="spark" size={11} /> ORBIT+</span>}
           {isOwned && <span className="product-owned"><Icon name={isInUse ? 'check' : 'spark'} size={12} />{isInUse ? t('equipped') : t('bag')}</span>}
@@ -127,7 +161,7 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
           </div>
         </div>
       </article>;
-    })}</div> : <div className="inline-empty market-empty"><div className="empty-mark">✳</div><p>{kind === 'owned' ? t('bagEmpty') : t('noResults')}</p>{kind === 'made' && <button className="btn btn-secondary btn-small" onClick={() => setCreatorOpen(true)}>{t('makeListing')}</button>}</div>}
+    })}</div> : <div className="inline-empty market-empty"><div className="empty-mark"><Icon name="market" size={20} /></div><p>{kind === 'owned' ? t('bagEmpty') : t('noResults')}</p>{kind === 'made' && <button className="btn btn-secondary btn-small" onClick={() => setCreatorOpen(true)}>{t('makeListing')}</button>}</div>}
 
     <div className="market-maker-callout"><div><span className="eyebrow">{t('makerTitle')}</span><h2>{t('creatorTitle')}</h2><p>{t('marketSub')}</p></div><button className="btn btn-primary" onClick={() => setCreatorOpen(true)}><Icon name="plus" size={16} />{t('makeListing')}</button></div>
 
@@ -152,7 +186,7 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
   const [secondColor, setSecondColor] = useState('#ff5b2e');
   const [spinFrame, setSpinFrame] = useState(false);
   const [auraExclusive, setAuraExclusive] = useState(false);
-  const [stickers, setStickers] = useState<string[]>(['🚀', '✨', '🔥', '🫶', '🪩', '🪐']);
+  const [stickers, setStickers] = useState<string[]>(VECTOR_BADGES.slice(0, 6).map((b) => b.id));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -165,11 +199,11 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
     setAccent(preset.accent);
   };
 
-  const toggleSticker = (emoji: string) => {
+  const toggleSticker = (badgeId: string) => {
     setStickers((prev) => {
-      if (prev.includes(emoji)) return prev.length > 1 ? prev.filter((x) => x !== emoji) : prev;
+      if (prev.includes(badgeId)) return prev.length > 1 ? prev.filter((x) => x !== badgeId) : prev;
       if (prev.length >= 12) return prev;
-      return [...prev, emoji];
+      return [...prev, badgeId];
     });
   };
 
@@ -212,7 +246,7 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
       <div className="creator-kinds">
         {(['theme', 'frame', 'stickers'] as ListingKind[]).map((k) => (
           <button type="button" aria-pressed={kind === k} className={`creator-kind ${kind === k ? 'active' : ''}`} onClick={() => setKind(k)} key={k}>
-            <span>{k === 'theme' ? '◐' : k === 'frame' ? '◎' : '✨'}</span>
+            <Icon name={k === 'theme' ? 'palette' : k === 'frame' ? 'spark' : 'grid'} size={18} />
             <small>{t(k === 'theme' ? 'creatorTheme' : k === 'frame' ? 'creatorFrame' : 'creatorSticker')}</small>
           </button>
         ))}
@@ -258,10 +292,11 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
 
     {kind === 'stickers' && <div className="field-label">{t('addStickers')} ({stickers.length}/12)
       <p className="field-hint">{t('stickerPickerHint')}</p>
-      {user.serverBacked && <p className="field-hint">{t('localStickerNote')}</p>}
       <div className="sticker-picker-grid">
-        {stickerPalette.map((emoji) => (
-          <button key={emoji} type="button" className={`sticker-pick-btn ${stickers.includes(emoji) ? 'picked' : ''}`} onClick={() => toggleSticker(emoji)}>{emoji}</button>
+        {VECTOR_BADGES.map((badge) => (
+          <button key={badge.id} type="button" title={badge.label} className={`sticker-pick-btn ${stickers.includes(badge.id) ? 'picked' : ''}`} onClick={() => toggleSticker(badge.id)}>
+            <VectorBadge id={badge.id} size="md" />
+          </button>
         ))}
       </div>
     </div>}
@@ -272,9 +307,9 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
         {kind === 'theme' ? (
           <div className="theme-preview" style={themePreviewStyle}><div className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></div><span className="theme-name-preview">{name.trim() || t('creatorTheme')}</span></div>
         ) : kind === 'frame' ? (
-          <div className="frame-preview" style={{ '--frame-a': accent, '--frame-b': secondColor } as React.CSSProperties}><span className={`frame-orbit ${spinFrame ? 'spin' : ''}`} /><span className="frame-face" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : undefined }}>{user.avatar ? '' : user.name.slice(0, 1).toUpperCase()}</span><span className="frame-stars">✳</span></div>
+          <div className="frame-preview-clean"><span className={`frame-halo-ring ${spinFrame ? 'pulse' : ''}`} style={{ '--frame-a': accent, '--frame-b': secondColor } as React.CSSProperties} /><span className="frame-face-clean" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : undefined }}>{user.avatar ? '' : user.name.slice(0, 1).toUpperCase()}</span></div>
         ) : (
-          <div className="sticker-preview">{stickers.slice(0, 6).map((x, i) => <span className={`sticker-pos sticker-pos-${i + 1}`} key={`${x}${i}`}>{x}</span>)}</div>
+          <div className="sticker-preview vector-pack-preview">{stickers.slice(0, 6).map((x, i) => <span className={`sticker-pos sticker-pos-${i + 1}`} key={`${x}${i}`}><VectorBadge id={x} size="md" /></span>)}</div>
         )}
       </div>
     </div>
@@ -291,7 +326,7 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
 
 function BagModal({ open, onClose, items, user, onUse }: { open: boolean; onClose: () => void; items: Listing[]; user: User; onUse: (l: Listing) => void }) {
   const { t } = useI18n();
-  return <Modal open={open} onClose={onClose} title={t('bag')} subtitle={`${items.length} · ${t('yourSparks')}: ${user.sparks}`} size="md">{items.length ? <div className="bag-list">{items.map((l) => { const equipped = user.frame === l.id || user.theme === l.id || user.stickerPack === l.id; return <div className="bag-row" key={l.id}><span className={`bag-thumb thumb-${l.kind}`} style={{ '--product-hue': l.theme?.accent ?? l.frame?.colors[0] ?? '#ffb987' } as React.CSSProperties}>{l.kind === 'stickers' ? l.stickers?.[0] : l.kind === 'theme' ? '◐' : '◎'}</span><div className="bag-copy"><b>{l.name}</b><small>{t(l.kind)}</small></div><button className={`btn btn-small ${equipped ? 'btn-secondary' : 'btn-outline'}`} onClick={() => onUse(l)}>{equipped ? t('equipped') : t('equip')}</button></div>; })}</div> : <div className="inline-empty"><div className="empty-mark">✳</div><p>{t('bagEmpty')}</p></div>}</Modal>;
+  return <Modal open={open} onClose={onClose} title={t('bag')} subtitle={`${items.length} · ${t('yourSparks')}: ${user.sparks}`} size="md">{items.length ? <div className="bag-list">{items.map((l) => { const equipped = user.frame === l.id || user.theme === l.id || user.stickerPack === l.id; return <div className="bag-row" key={l.id}><span className={`bag-thumb thumb-${l.kind}`} style={{ '--product-hue': l.theme?.accent ?? l.frame?.colors[0] ?? '#ffb987' } as React.CSSProperties}>{l.kind === 'stickers' && l.stickers?.[0] ? <VectorBadge id={l.stickers[0]} size="sm" /> : <Icon name={l.kind === 'theme' ? 'palette' : 'spark'} size={15} />}</span><div className="bag-copy"><b>{l.name}</b><small>{t(l.kind)}</small></div><button className={`btn btn-small ${equipped ? 'btn-secondary' : 'btn-outline'}`} onClick={() => onUse(l)}>{equipped ? t('equipped') : t('equip')}</button></div>; })}</div> : <div className="inline-empty"><div className="empty-mark"><Icon name="grid" size={20} /></div><p>{t('bagEmpty')}</p></div>}</Modal>;
 }
 
 function GiftModal({ open, onClose, listing, balance, shared, people, onGift }: { open: boolean; onClose: () => void; listing: Listing | null; balance: number; shared: boolean; people: User[]; onGift: (recipientId: string) => void }) {

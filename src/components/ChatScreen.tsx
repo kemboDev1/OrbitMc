@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import type { DB, Hub, Message, User } from '../data/types';
+import { Crown, Sparkles, Tag } from 'lucide-react';
+import type { DB, Message, User } from '../data/types';
 import { addReaction, canDeleteMessageForEveryone, canPostInChannel, deleteMessage, editMessage, loadOlderMessages, parseDM, pinMessage, sendMessage, setUserBlocked, startDM, updateRead, votePoll } from '../data/chat';
 import { addRoom, leaveHub } from '../data/hubs';
 import { getAura, hasAura } from '../data/market';
@@ -7,18 +8,20 @@ import { fileToDataUrl } from '../lib/image';
 import { renderRichText } from '../lib/format';
 import { chime, notify } from '../lib/notify';
 import { prefs } from '../lib/prefs';
-import { hueOf, fmtTime, uid, cx } from '../lib/util';
+import { fmtTime, uid, cx } from '../lib/util';
 import { useI18n } from '../i18n';
 import { Avatar, AvatarPile } from './Avatar';
 import { HubSettingsModal } from './HubPages';
 import { Icon } from './Icons';
 import { Modal } from './Modal';
+import { bannerStyleFor } from './SettingsPage';
 import { tell, tellUndo } from './Toast';
 import { AppError } from '../data/errors';
 import { AURA, LIMITS } from '../config';
 import { clearHistory, hiddenBefore, hideMessage, isMessageHidden, restoreHistory, setMuted, useChatControls } from '../data/chatControls';
+import { HubSymbol, VECTOR_BADGES, VectorBadge } from './VectorAssets';
 
-const quickEmoji = ['🫶', '😂', '✨', '🤍', '👀', '🔥', '🥹', '🌱', '🎧', '🙌', '😮‍💨', '💀'];
+const quickEmoji = ['🫶', '😂', '✨', '🤍', '👀', '🔥', '🎧', '🙌'];
 
 export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, onOpenList }: {
   db: DB; user: User; channel: string | null; setChannel: (id: string) => void; onStartChat: () => void; onOpenList?: () => void;
@@ -96,7 +99,6 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
     if (channel) updateRead(user.id, channel);
   }, [channel, user.id]);
 
-  // Auto-resize composer textarea cleanly
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -291,7 +293,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   return <div className="chat-layout">
     {activeHub && <div className="channel-rail">
       <div className="channel-hub-heading">
-        <span className="hub-mark" style={{ '--hub-hue': activeHub.hue } as React.CSSProperties}>{activeHub.emoji}</span>
+        <span className="hub-mark" style={{ '--hub-hue': activeHub.hue } as React.CSSProperties}><HubSymbol mark={activeHub.emoji} size={16} /></span>
         <div><strong>{activeHub.name}</strong><small>{people.length} {t('members').toLowerCase()}</small></div>
         {canManageHub && <button className="icon-btn" aria-label={t('hubSettings')} title={t('hubSettings')} onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={15} /></button>}
         <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={async () => { const url = `${window.location.origin}/invite/${activeHub.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={15} /></button>
@@ -318,7 +320,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
           {dm && otherId !== user.id && <div className="conversation-menu-wrap"><button className={`icon-btn ${conversationMenuOpen ? 'active' : ''}`} aria-label={t('conversationOptions')} title={t('conversationOptions')} aria-expanded={conversationMenuOpen} onClick={() => setConversationMenuOpen((open) => !open)}><Icon name="moreVertical" size={17} /></button>{conversationMenuOpen && <div className="conversation-menu" onClick={(event) => event.stopPropagation()}><button onClick={toggleMute}><Icon name={mutedConversation ? 'bell' : 'moon'} size={15} />{t(mutedConversation ? 'unmuteChat' : 'muteChat')}</button><button onClick={() => { setConversationMenuOpen(false); setConfirmClear(true); }}><Icon name="trash" size={15} />{t('clearHistory')}</button><span className="conversation-menu-note">{t('chatControlsLocalOnly')}</span><span className="menu-divider" /><button className="danger-action" onClick={() => { setConversationMenuOpen(false); setConfirmBlock(true); }}><Icon name={blockedConversation ? 'check' : 'lock'} size={15} />{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button></div>}</div>}
         </div>
       </header>
-      {activeHub && <div className="mobile-room-strip">{activeHub.rooms.map((room) => <button key={room.id} className={channel === room.id ? 'active' : ''} onClick={() => setChannel(room.id)}><span>{room.kind === 'broadcast' ? '📢' : '#'}</span>{room.name}</button>)}{canManageHub && <button className="mobile-room-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)}><Icon name="plus" size={14} /></button>}</div>}
+      {activeHub && <div className="mobile-room-strip">{activeHub.rooms.map((room) => <button key={room.id} className={channel === room.id ? 'active' : ''} onClick={() => setChannel(room.id)}><span>{room.kind === 'broadcast' ? <Icon name="megaphone" size={12} /> : '#'}</span>{room.name}</button>)}{canManageHub && <button className="mobile-room-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)}><Icon name="plus" size={14} /></button>}</div>}
 
       {pinned.length > 0 && <button className="pinned-banner" onClick={() => setPinnedOpen(true)}><Icon name="pin" size={14} /><span><b>{t('pinnedSection')} ({pinned.length})</b><em>{pinned[pinned.length - 1].text || pinned[pinned.length - 1].sticker || (pinned[pinned.length - 1].poll?.question ?? '📷')}</em></span><Icon name="chevron" size={14} /></button>}
 
@@ -326,8 +328,8 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
         {remoteHistory && !clearMark && hasOlderHistory && messages.length > 0 && <button className="load-older-messages" onClick={() => void loadOlderHistory()} disabled={loadingOlderHistory}>{t(loadingOlderHistory ? 'loadingOlder' : 'loadOlder')}</button>}
         <div className="conversation-intro">
           {dm && <button type="button" className="intro-avatar" aria-label={t('profile')} title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: other.id }))}><Avatar user={other} size="xl" showStatus /></button>}
-          {!dm && <div className="intro-hub-mark" style={{ '--hub-hue': activeHub?.hue ?? 30 } as React.CSSProperties}>{activeHub?.emoji ?? '✳'}</div>}
-          <h2>{dm ? (otherId === user.id ? t('saved') : other.name) : `${activeHub?.emoji ?? ''} ${activeHub?.name ?? ''}`}</h2>
+          {!dm && <div className="intro-hub-mark" style={{ '--hub-hue': activeHub?.hue ?? 30 } as React.CSSProperties}><HubSymbol mark={activeHub?.emoji ?? 'icon:orbit'} size={22} /></div>}
+          <h2>{dm ? (otherId === user.id ? t('saved') : other.name) : activeHub?.name}</h2>
           <p>{dm ? (other.bio || (otherId === user.id ? t('savedDM') : t('welcomeSub'))) : (activeRoom?.topic || activeHub?.about || t('quietSub'))}</p>
           {dm && <span className="member-since">@{other.username} · {other.presence === 'online' ? t('online') : t(other.presence)}</span>}
           {!dm && activeHub && <span className="member-since">{people.length} {t('members').toLowerCase()} · #{activeRoom?.name}</span>}
@@ -341,16 +343,26 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
           const isMine = msg.by === user.id;
           const replyMessage = msg.reply ? messages.find((m) => m.id === msg.reply) : undefined;
           const totalPollVotes = msg.poll ? msg.poll.options.reduce((s, o) => s + o.votes.length, 0) : 0;
+          const senderPro = hasAura(person.id);
+          const senderTier = senderPro ? person.aura?.tier : undefined;
+          const fontClass = senderPro && person.chatFont ? `font-${person.chatFont}` : '';
+          const effectClass = senderPro && person.messageEffect && person.messageEffect !== 'none' ? `effect-${person.messageEffect}` : '';
 
-          return <article id={`msg-${msg.id}`} key={msg.id} className={cx('message-row', isMine && 'mine', grouped && 'grouped', msg.pinned && 'message-pinned')}>
+          return <article id={`msg-${msg.id}`} key={msg.id} className={cx('message-row', isMine && 'mine', grouped && 'grouped', msg.pinned && 'message-pinned', effectClass)}>
             {!grouped && <button type="button" className="message-avatar" aria-label={t('profile')} title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}><Avatar user={person} size="sm" /></button>}
             {grouped && <time className="group-time" title={fmtTime(msg.ts, lang)}>{fmtTime(msg.ts, lang)}</time>}
             <div className="message-main">
-              {!grouped && <div className="message-byline"><button className="message-name" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{person.name}</button>{hasAura(person.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: person.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: person.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}{person.isAdmin && <span className="admin-tag">{t('admin')}</span>}<time>{fmtTime(msg.ts, lang)}</time>{isMine && <span className="message-mine-tag">{t('you')}</span>}</div>}
+              {!grouped && <div className="message-byline">
+                <button className={`message-name ${fontClass}`} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{person.name}</button>
+                {senderPro && <span className={`pro-flex-pill tier-${senderTier ?? 'ember'}`}>{senderTier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}{senderTier === 'nova' ? 'MAX' : 'PRO'}</span>}
+                {person.isAdmin && <span className="admin-tag">{t('admin')}</span>}
+                <time>{fmtTime(msg.ts, lang)}</time>
+                {isMine && <span className="message-mine-tag">{t('you')}</span>}
+              </div>}
               {replyMessage && <button className="reply-preview" onClick={() => jumpTo(replyMessage.id)}><Icon name="reply" size={12} /><span>{t('replyBadge')} {data.users[replyMessage.by]?.name ?? t('you')}:</span><em>{replyMessage.text || replyMessage.sticker || replyMessage.poll?.question || '📷'}</em></button>}
               {editId === msg.id ? <form className="edit-message" onSubmit={(e) => { e.preventDefault(); editSave(msg); }}><input ref={editRef} value={editText} maxLength={maxChars} onChange={(e) => setEditText(e.target.value)} /><div><button type="button" className="text-action" onClick={() => setEditId(null)}>{t('cancel')}</button><button type="submit" className="btn btn-primary btn-small">{t('save')}</button></div></form> : <>
-                {msg.text && <div className="message-text">{renderRichText(msg.text)}{msg.edited && <span className="edited-label"> · {t('edit').toLowerCase()}</span>}</div>}
-                {msg.sticker && <div className="message-sticker">{msg.sticker}</div>}
+                {msg.text && <div className={`message-text ${fontClass} ${effectClass}`}>{renderRichText(msg.text)}{msg.edited && <span className="edited-label"> · {t('edit').toLowerCase()}</span>}</div>}
+                {msg.sticker && <div className="message-sticker"><VectorBadge id={msg.sticker} size="lg" /></div>}
                 {msg.image && <button type="button" className="message-image-btn" onClick={() => setLightboxSrc(msg.image!)}><img className="message-image" src={msg.image} alt="" loading="lazy" /></button>}
                 {msg.poll && <div className="message-poll">
                   <div className="poll-head"><Icon name="barChart" size={15} /><strong>{msg.poll.question}</strong></div>
@@ -382,17 +394,27 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       {reply && !blockedConversation && <div className="replying-bar"><Icon name="reply" size={14} /><span>{t('replyBadge')} <b>{data.users[replyTargetMsg?.by ?? '']?.name ?? t('you')}</b></span><em>{replyTargetMsg?.text || replyTargetMsg?.sticker || replyTargetMsg?.poll?.question || '📷'}</em><button className="icon-btn" aria-label={t('cancel')} onClick={() => setReply(undefined)}><Icon name="close" size={13} /></button></div>}
 
       <form className="composer-wrap" onSubmit={submit}>
-        {emojiOpen && <div className="composer-emoji" role="group" aria-label={t('emoji')}>
+        {emojiOpen && <div className="composer-emoji composer-vector-tray" role="group" aria-label={t('emoji')}>
           {ownedStickerPacks.map((pack) => (
             <div key={pack.id} className="composer-pack-group">
               <small>{pack.name}</small>
               <div className="composer-pack-row">
-                {pack.stickers?.map((emoji, i) => <button key={`${pack.id}-${emoji}-${i}`} type="button" title={pack.name} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: emoji, reply }); setReply(undefined); setEmojiOpen(false); } catch (err) { report(err); } }}>{emoji}</button>)}
+                {pack.stickers?.map((badgeId, i) => <button key={`${pack.id}-${badgeId}-${i}`} type="button" title={pack.name} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: badgeId, reply }); setReply(undefined); setEmojiOpen(false); } catch (err) { report(err); } }}><VectorBadge id={badgeId} size="sm" /></button>)}
               </div>
             </div>
           ))}
+          <div className="composer-pack-group">
+            <small>{t('stickers')}</small>
+            <div className="composer-pack-row">
+              {VECTOR_BADGES.slice(0, 12).map((badge) => (
+                <button key={badge.id} type="button" title={badge.label} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: badge.id, reply }); setReply(undefined); setEmojiOpen(false); } catch (err) { report(err); } }}>
+                  <VectorBadge id={badge.id} size="sm" />
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="composer-pack-row">
-            {quickEmoji.concat(['😊', '🪩', '🌈', '🍓', '☕', '🪴', '🫧', '😌', '💫', '🧸', '🦋', '🪐']).map((emoji, i) => <button key={`${emoji}${i}`} type="button" onClick={() => { setComposer((v) => v + emoji); setEmojiOpen(false); textareaRef.current?.focus(); }}>{emoji}</button>)}
+            {quickEmoji.map((emoji, i) => <button key={`${emoji}${i}`} type="button" onClick={() => { setComposer((v) => v + emoji); setEmojiOpen(false); textareaRef.current?.focus(); }}>{emoji}</button>)}
           </div>
         </div>}
 
@@ -418,7 +440,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       </form>
     </section>
 
-    {membersOpen && <aside className="members-drawer"><div className="members-head"><strong>{dm ? t('profile') : t('members')}</strong><button className="icon-btn" aria-label={t('cancel')} onClick={() => setMembersOpen(false)}><Icon name="close" size={16} /></button></div>{dm ? <><div className="profile-cover" style={{ '--cover-hue': other.hue || hueOf(other.username) } as React.CSSProperties} /><div className="profile-aside-card"><Avatar user={other} size="lg" showStatus /><span className="member-presence">{t(other.presence)}</span><h2>{other.name}{hasAura(other.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</h2><p className="profile-handle">@{other.username}</p>{other.bio && <p>{other.bio}</p>}{other.statusText && <p className="profile-status">“{other.statusText}”</p>}{hasAura(other.id) && <span className="profile-plan"><Icon name="check" size={13} />{t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })}</span>}<div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(other.createdAt) })}</span>{other.inventory.length > 0 && <span>{t('collectionCount', { count: other.inventory.length })}</span>}{(other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0 })}</span>}</div><button className="btn btn-secondary btn-full" onClick={() => setMembersOpen(false)}>{t('backToApp')}</button></div></> : <><div className="member-list">{people.map((p) => <button key={p.id} className="member-row" onClick={() => { if (p.id !== user.id) { setChannel(startDM(user.id, p.id)); setMembersOpen(false); } }}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}</b><small>{p.statusText || t(p.presence)}</small></span>{activeHub?.members[p.id] === 'owner' && <span className="role-chip owner">{t('owner')}</span>}{activeHub?.members[p.id] === 'mod' && <span className="role-chip mod">{t('moderator')}</span>}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</button>)}</div><div className="member-drawer-actions">{canManageHub && <button className="btn btn-outline btn-small" onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={14} />{t('hubSettings')}</button>}<button className="btn btn-outline btn-small" onClick={async () => { const url = `${window.location.origin}/invite/${activeHub!.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={14} />{t('inviteCopy')}</button>{activeHub!.ownerId !== user.id && <button className="btn btn-ghost btn-small" onClick={() => { setMembersOpen(false); setLeaveOpen(true); }}><Icon name="back" size={14} />{t('leaveHub')}</button>}</div></>}</aside>}
+    {membersOpen && <aside className="members-drawer"><div className="members-head"><strong>{dm ? t('profile') : t('members')}</strong><button className="icon-btn" aria-label={t('cancel')} onClick={() => setMembersOpen(false)}><Icon name="close" size={16} /></button></div>{dm ? <><div className="profile-cover" style={bannerStyleFor(other)} /><div className="profile-aside-card"><Avatar user={other} size="lg" showStatus /><span className="member-presence">{t(other.presence)}</span><h2>{other.name}{hasAura(other.id) && <span className={`pro-flex-pill tier-${other.aura?.tier ?? 'ember'}`}>{other.aura?.tier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}{other.aura?.tier === 'nova' ? 'MAX' : 'PRO'}</span>}</h2><p className="profile-handle">@{other.username}</p>{other.bio && <p>{other.bio}</p>}{other.statusText && <p className="profile-status">“{other.statusText}”</p>}{!!other.profileTags?.length && <div className="tag-chips-list center">{other.profileTags.map((tag) => <span key={tag} className="profile-custom-tag"><Tag size={10} />{tag}</span>)}</div>}<div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(other.createdAt) })}</span>{other.inventory.length > 0 && <span>{t('collectionCount', { count: other.inventory.length })}</span>}{(other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0 })}</span>}</div><button className="btn btn-secondary btn-full" onClick={() => setMembersOpen(false)}>{t('backToApp')}</button></div></> : <><div className="member-list">{people.map((p) => <button key={p.id} className="member-row" onClick={() => { if (p.id !== user.id) { setChannel(startDM(user.id, p.id)); setMembersOpen(false); } }}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}</b><small>{p.statusText || t(p.presence)}</small></span>{activeHub?.members[p.id] === 'owner' && <span className="role-chip owner">{t('owner')}</span>}{activeHub?.members[p.id] === 'mod' && <span className="role-chip mod">{t('moderator')}</span>}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</button>)}</div><div className="member-drawer-actions">{canManageHub && <button className="btn btn-outline btn-small" onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={14} />{t('hubSettings')}</button>}<button className="btn btn-outline btn-small" onClick={async () => { const url = `${window.location.origin}/invite/${activeHub!.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={14} />{t('inviteCopy')}</button>{activeHub!.ownerId !== user.id && <button className="btn btn-ghost btn-small" onClick={() => { setMembersOpen(false); setLeaveOpen(true); }}><Icon name="back" size={14} />{t('leaveHub')}</button>}</div></>}</aside>}
 
     <Modal open={pinnedOpen} onClose={() => setPinnedOpen(false)} title={t('pinnedMessages')} size="md">
       {pinned.length ? <div className="pinned-list">{pinned.map((pm) => <div key={pm.id} className="pinned-item">

@@ -177,7 +177,18 @@ const ru: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [
   adminHealthOk: 'Все системы в норме',
   adminHealthCheck: 'Проверить целостность',
   suspendedNotice: 'Этот аккаунт ограничен в отправке сообщений.',
-
+  profileBanner: 'Баннер и градиент профиля',
+  profileBannerUpload: 'Загрузить баннер',
+  profileStrokeLabel: 'Обводка аватара',
+  profileTagsLabel: 'Теги профиля (до 5)',
+  profileTagsPlaceholder: 'Добавить тег (например, Designer)…',
+  profileTemplateLabel: 'Стиль карточки',
+  chatFontLabel: 'Шрифт сообщений (Pro)',
+  messageEffectLabel: 'Эффект сообщений (Pro)',
+  studioPlatform: 'Платформа Orbit Studio',
+  studioPlatformSub: 'Отдельная Pro-студия для создания тем, рамок и векторных наборов с публикацией в Orbit Shop.',
+  openStudioPlatform: 'Открыть Orbit Studio',
+  studioSubRequired: 'Для входа в Orbit Studio нужна активная подписка Orbit+.',
 };
 
 export default ru;

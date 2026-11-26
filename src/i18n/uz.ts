@@ -176,6 +176,18 @@ const uz: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [
   adminHealthOk: 'Barcha tizimlar barqaror',
   adminHealthCheck: 'Tizimni tekshirish',
   suspendedNotice: 'Bu akkauntga xabar yuborish cheklangan.',
+  profileBanner: 'Profil banneri va gradienti',
+  profileBannerUpload: 'Banner yuklash',
+  profileStrokeLabel: 'Avatar halqa rangi',
+  profileTagsLabel: 'Profil teglari (maks. 5 ta)',
+  profileTagsPlaceholder: 'Teg qo‘shing (masalan: Designer, Founder)…',
+  profileTemplateLabel: 'Profil karta uslubi',
+  chatFontLabel: 'Pro xabar shrifti',
+  messageEffectLabel: 'Pro xabar effekti',
+  studioPlatform: 'Orbit Studio Platformasi',
+  studioPlatformSub: 'Orbit Shop uchun ilg‘or mavzu, ramka va vektor to‘plamlarni yaratish va nashr qilish uchun alohida Pro studiya.',
+  openStudioPlatform: 'Orbit Studio’ni ochish',
+  studioSubRequired: 'Orbit Studio platformasiga kirish uchun Orbit+ obunasi kerak.',
 };
 
 export default uz;

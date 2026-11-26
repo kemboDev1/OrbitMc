@@ -15,13 +15,20 @@ export async function updateProfile(userId: string, input: { name: string; bio: 
   if (input.avatar !== undefined && input.avatar !== null && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.avatar) || input.avatar.length > LIMITS.imageChars)) {
     throw new AppError('err.imgBig');
   }
-  for (const image of [input.banner]) if (image !== undefined && image !== null && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(image) || image.length > LIMITS.imageChars)) throw new AppError('err.imgBig');
+  if (input.banner !== undefined && input.banner !== null && !input.banner.startsWith('grad:') && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.banner) || input.banner.length > LIMITS.imageChars)) throw new AppError('err.imgBig');
   if (input.profileStroke !== undefined && input.profileStroke !== null && !/^#[0-9a-f]{6}$/i.test(input.profileStroke)) throw new AppError('err.badText');
   const tags = (input.profileTags ?? currentUser?.profileTags ?? []).map((tag) => tag.trim().replace(/\s+/g, ' ')).filter(Boolean);
   if (tags.length > 5 || tags.some((tag) => tag.length > 20 || !/^[\p{L}\p{N} _-]+$/u.test(tag))) throw new AppError('err.badText');
   if (input.profileTemplate !== undefined && !['clean', 'halo', 'frame'].includes(input.profileTemplate)) throw new AppError('err.badText');
   if (currentUser.serverBacked) {
-    await updateRemoteProfile(userId, { name, bio, avatar: input.avatar, banner: input.banner, profileStroke: input.profileStroke, profileTags: input.profileTags === undefined ? undefined : tags, profileTemplate: input.profileTemplate });
+    saveCosmetics(userId, {
+      ...(input.banner !== undefined ? { banner: input.banner ?? undefined } : {}),
+      ...(input.profileStroke !== undefined ? { profileStroke: input.profileStroke ?? undefined } : {}),
+      ...(input.profileTags !== undefined ? { profileTags: tags } : {}),
+      ...(input.profileTemplate !== undefined ? { profileTemplate: input.profileTemplate } : {}),
+    });
+    const remoteBanner = input.banner && input.banner.startsWith('grad:') ? undefined : input.banner;
+    await updateRemoteProfile(userId, { name, bio, avatar: input.avatar, banner: remoteBanner, profileStroke: input.profileStroke, profileTags: input.profileTags === undefined ? undefined : tags, profileTemplate: input.profileTemplate });
     return;
   }
   db.transaction((d) => {
@@ -36,6 +43,16 @@ export async function updateProfile(userId: string, input: { name: string; bio: 
     if (input.profileStroke !== undefined) user.profileStroke = input.profileStroke ?? undefined;
     if (input.profileTags !== undefined) user.profileTags = tags;
     if (input.profileTemplate !== undefined) user.profileTemplate = input.profileTemplate;
+  });
+}
+
+export function updateProFlex(userId: string, patch: { chatFont?: 'sans' | 'display' | 'mono' | 'serif'; messageEffect?: 'none' | 'glow' | 'aurora' | 'ember' }): void {
+  db.transaction((d) => {
+    const user = d.users[userId];
+    if (!user || user.bot) throw new AppError('err.notMember');
+    if (patch.chatFont !== undefined) user.chatFont = patch.chatFont;
+    if (patch.messageEffect !== undefined) user.messageEffect = patch.messageEffect;
+    saveCosmetics(userId, { chatFont: user.chatFont, messageEffect: user.messageEffect });
   });
 }
 

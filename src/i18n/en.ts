@@ -175,7 +175,18 @@ const en = {
   adminHealthOk: 'All systems healthy',
   adminHealthCheck: 'Run integrity check',
   suspendedNotice: 'This account is suspended from sending messages.',
-
+  profileBanner: 'Profile banner & gradient',
+  profileBannerUpload: 'Upload banner',
+  profileStrokeLabel: 'Avatar ring stroke',
+  profileTagsLabel: 'Profile tags (max 5)',
+  profileTagsPlaceholder: 'Add a tag (e.g. Designer, Founder)…',
+  profileTemplateLabel: 'Card style',
+  chatFontLabel: 'Pro message font',
+  messageEffectLabel: 'Pro message glow',
+  studioPlatform: 'Orbit Studio Platform',
+  studioPlatformSub: 'Dedicated pro workbench to craft advanced themes, frames & vector packs and publish straight to Orbit Shop.',
+  openStudioPlatform: 'Launch Orbit Studio',
+  studioSubRequired: 'Orbit+ subscription required to open Orbit Studio Platform.',
 } as const;
 
 export default en;
