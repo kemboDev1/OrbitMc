@@ -202,6 +202,8 @@ export function App() {
   const [pickedBadges, setPickedBadges] = useState<string[]>([
     'badge:rocket',
     'badge:crown',
+    'badge:flame',
+    'badge:zap',
     'badge:gem',
     'badge:orbit',
   ]);
@@ -310,10 +312,10 @@ export function App() {
   function toggleBadge(id: string) {
     setPickedBadges((prev) =>
       prev.includes(id)
-        ? prev.length > 2
+        ? prev.length > 6
           ? prev.filter((item) => item !== id)
           : prev
-        : prev.length >= 6
+        : prev.length >= 12
           ? [...prev.slice(1), id]
           : [...prev, id],
     );

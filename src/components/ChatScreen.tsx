@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { Crown, Sparkles, Tag } from 'lucide-react';
+import { BellOff, Clock, Crown, Smile, Sparkles } from 'lucide-react';
 import type { DB, Message, User } from '../data/types';
 import { addReaction, canDeleteMessageForEveryone, canPostInChannel, deleteMessage, editMessage, loadOlderMessages, parseDM, pinMessage, sendMessage, setUserBlocked, startDM, updateRead, votePoll } from '../data/chat';
 import { addRoom, leaveHub } from '../data/hubs';
@@ -11,17 +11,17 @@ import { prefs } from '../lib/prefs';
 import { fmtTime, uid, cx } from '../lib/util';
 import { useI18n } from '../i18n';
 import { Avatar, AvatarPile } from './Avatar';
-import { HubSettingsModal } from './HubPages';
+import { HubInviteModal, HubSettingsModal } from './HubPages';
 import { Icon } from './Icons';
 import { Modal } from './Modal';
-import { bannerStyleFor } from './SettingsPage';
+import { ProfileExplorerContent } from './ProfileExplorer';
 import { tell, tellUndo } from './Toast';
 import { AppError } from '../data/errors';
 import { AURA, LIMITS } from '../config';
-import { clearHistory, hiddenBefore, hideMessage, isMessageHidden, restoreHistory, setMuted, useChatControls } from '../data/chatControls';
+import { clearHistory, deleteConversation, getMuteUntil, hiddenBefore, hideMessage, isMessageHidden, restoreHistory, setMutedFor, useChatControls } from '../data/chatControls';
 import { HubSymbol, VECTOR_BADGES, VectorBadge } from './VectorAssets';
 
-const quickEmoji = ['🫶', '😂', '✨', '🤍', '👀', '🔥', '🎧', '🙌'];
+const quickEmoji = ['🫶', '😂', '✨', '🤍', '👀', '🔥', '🎧', '🙌', '🥳', '💎', '⚡', '🚀', '🎨', '💬', '👏', '💙', '🌙', '☕'];
 
 export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, onOpenList }: {
   db: DB; user: User; channel: string | null; setChannel: (id: string) => void; onStartChat: () => void; onOpenList?: () => void;
@@ -34,6 +34,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [emojiTab, setEmojiTab] = useState<'vectors' | 'emoji'>('vectors');
   const [moreFor, setMoreFor] = useState<string | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
   const [pinnedOpen, setPinnedOpen] = useState(false);
@@ -42,9 +43,11 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
   const [hubManageOpen, setHubManageOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Message | null>(null);
   const [confirmDeleteEveryone, setConfirmDeleteEveryone] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmDeleteChat, setConfirmDeleteChat] = useState(false);
   const [hasOlderHistory, setHasOlderHistory] = useState(false);
   const [loadingOlderHistory, setLoadingOlderHistory] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
@@ -86,7 +89,8 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const messageLayout = pref.layout === 'auto' ? (directLayout ? 'bubbles' : 'stream') : pref.layout;
   const pinned = messages.filter((m) => m.pinned);
   const blockedConversation = !!dm && otherId !== user.id && chatControls.blocked.includes(otherId);
-  const mutedConversation = !!dm && otherId !== user.id && chatControls.muted.includes(otherId);
+  const muteUntil = dm && otherId !== user.id ? getMuteUntil(user.id, otherId) : 0;
+  const mutedConversation = muteUntil !== 0;
   const canPost = channel ? canPostInChannel(channel, user.id) : false;
   const isBroadcastLocked = !!activeRoom && activeRoom.kind === 'broadcast' && !canPost;
   const isSuspended = !!user.suspended;
@@ -257,11 +261,22 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
     tellUndo(t('historyCleared'), t('undo'), () => restoreHistory(user.id, channel, previous));
   };
 
-  const toggleMute = () => {
-    const nextMuted = !mutedConversation;
-    setMuted(user.id, otherId, nextMuted);
+  const muteFor = (duration: number | 'forever' | 0) => {
+    setMutedFor(user.id, otherId, duration);
     setConversationMenuOpen(false);
-    tell(t(nextMuted ? 'chatMuted' : 'chatUnmuted'), 'good');
+    tell(t(duration === 0 ? 'chatUnmuted' : 'chatMuted'), 'good');
+  };
+
+  const deleteChatNow = () => {
+    if (!channel) return;
+    deleteConversation(user.id, channel);
+    setConfirmDeleteChat(false);
+    setConversationMenuOpen(false);
+    const nextChannel = Object.keys(data.dms[user.id] ?? []).find((id) => id !== channel)
+      ?? Object.values(data.hubs).find((h) => !!h.members[user.id])?.rooms[0]?.id
+      ?? '';
+    setChannel(nextChannel);
+    tell(t('chatDeleted'), 'good');
   };
 
   const confirmBlockChange = async () => {
@@ -296,7 +311,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
         <span className="hub-mark" style={{ '--hub-hue': activeHub.hue } as React.CSSProperties}><HubSymbol mark={activeHub.emoji} size={16} /></span>
         <div><strong>{activeHub.name}</strong><small>{people.length} {t('members').toLowerCase()}</small></div>
         {canManageHub && <button className="icon-btn" aria-label={t('hubSettings')} title={t('hubSettings')} onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={15} /></button>}
-        <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={async () => { const url = `${window.location.origin}/invite/${activeHub.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={15} /></button>
+        <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={() => setInviteModalOpen(true)}><Icon name="link" size={15} /></button>
       </div>
       <div className="channel-label">{t('rooms')}<button className="tiny-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)} disabled={!canManageHub}><Icon name="plus" size={14} /></button></div>
       <div className="channel-links">{activeHub.rooms.map((room) => <button key={room.id} className={`channel-link ${channel === room.id ? 'active' : ''}`} onClick={() => setChannel(room.id)}><span className="hash">{room.kind === 'broadcast' ? <Icon name="megaphone" size={13} /> : '#'}</span><span>{room.name}</span></button>)}</div>
@@ -308,16 +323,32 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
         <button className="conversation-back" onClick={onOpenList ?? onStartChat} aria-label={t('backToChats')} title={t('backToChats')}><Icon name="back" size={17} /></button>
         <button className="conversation-person" onClick={() => setMembersOpen((v) => !v)}>
           {dm ? <Avatar user={other} size="sm" showStatus /> : <span className="hash-head">{activeRoom?.kind === 'broadcast' ? <Icon name="megaphone" size={16} /> : '#'}</span>}
-          <span className="conversation-title"><strong>{channelTitle}</strong><small>{subtitle}</small></span>
+          <span className="conversation-title"><strong>{channelTitle}{mutedConversation && <BellOff size={12} className="muted-inline-icon" />}</strong><small>{subtitle}</small></span>
         </button>
         <div className="conversation-tools">
           {activeHub && canManageHub && <button className="icon-btn mobile-hub-manage" aria-label={t('hubSettings')} title={t('hubSettings')} onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={16} /></button>}
-          {activeHub && <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={async () => { const url = `${window.location.origin}/invite/${activeHub.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={15} /></button>}
+          {activeHub && <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={() => setInviteModalOpen(true)}><Icon name="link" size={15} /></button>}
           {activeHub && <span className="header-people"><AvatarPile people={people.filter((p) => p.presence === 'online')} limit={3} /></span>}
           {pinned.length > 0 && <button className={`icon-btn ${pinnedOpen ? 'active' : ''}`} aria-label={t('pinnedMessages')} title={t('pinnedMessages')} onClick={() => setPinnedOpen(true)}><Icon name="pin" size={16} /></button>}
           <button className={`icon-btn ${membersOpen ? 'active' : ''}`} aria-label={t('members')} title={t('members')} onClick={() => setMembersOpen((v) => !v)}><Icon name="people" size={18} /></button>
           <button className="icon-btn" aria-label={t('openSearch')} title={t('openSearch')} onClick={() => window.dispatchEvent(new CustomEvent('sado:search', { detail: { channel } }))}><Icon name="search" size={18} /></button>
-          {dm && otherId !== user.id && <div className="conversation-menu-wrap"><button className={`icon-btn ${conversationMenuOpen ? 'active' : ''}`} aria-label={t('conversationOptions')} title={t('conversationOptions')} aria-expanded={conversationMenuOpen} onClick={() => setConversationMenuOpen((open) => !open)}><Icon name="moreVertical" size={17} /></button>{conversationMenuOpen && <div className="conversation-menu" onClick={(event) => event.stopPropagation()}><button onClick={toggleMute}><Icon name={mutedConversation ? 'bell' : 'moon'} size={15} />{t(mutedConversation ? 'unmuteChat' : 'muteChat')}</button><button onClick={() => { setConversationMenuOpen(false); setConfirmClear(true); }}><Icon name="trash" size={15} />{t('clearHistory')}</button><span className="conversation-menu-note">{t('chatControlsLocalOnly')}</span><span className="menu-divider" /><button className="danger-action" onClick={() => { setConversationMenuOpen(false); setConfirmBlock(true); }}><Icon name={blockedConversation ? 'check' : 'lock'} size={15} />{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button></div>}</div>}
+          {dm && otherId !== user.id && <div className="conversation-menu-wrap"><button className={`icon-btn ${conversationMenuOpen ? 'active' : ''}`} aria-label={t('conversationOptions')} title={t('conversationOptions')} aria-expanded={conversationMenuOpen} onClick={() => setConversationMenuOpen((open) => !open)}><Icon name="moreVertical" size={17} /></button>{conversationMenuOpen && <div className="conversation-menu conversation-menu-wide" onClick={(event) => event.stopPropagation()}>
+            {mutedConversation ? (
+              <button onClick={() => muteFor(0)}><Icon name="bell" size={15} /><span>{t('unmuteChat')}</span></button>
+            ) : (
+              <>
+                <span className="conversation-menu-section"><Clock size={12} /> {t('muteChat')}</span>
+                <button onClick={() => muteFor(3_600_000)}><BellOff size={14} />{t('mute1h')}</button>
+                <button onClick={() => muteFor(28_800_000)}><BellOff size={14} />{t('mute8h')}</button>
+                <button onClick={() => muteFor(604_800_000)}><BellOff size={14} />{t('mute1w')}</button>
+                <button onClick={() => muteFor('forever')}><BellOff size={14} />{t('muteForever')}</button>
+              </>
+            )}
+            <span className="menu-divider" />
+            <button onClick={() => { setConversationMenuOpen(false); setConfirmClear(true); }}><Icon name="trash" size={15} />{t('clearHistory')}</button>
+            <button className="danger-action" onClick={() => { setConversationMenuOpen(false); setConfirmDeleteChat(true); }}><Icon name="trash" size={15} />{t('deleteChat')}</button>
+            <button className="danger-action" onClick={() => { setConversationMenuOpen(false); setConfirmBlock(true); }}><Icon name={blockedConversation ? 'check' : 'lock'} size={15} />{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button>
+          </div>}</div>}
         </div>
       </header>
       {activeHub && <div className="mobile-room-strip">{activeHub.rooms.map((room) => <button key={room.id} className={channel === room.id ? 'active' : ''} onClick={() => setChannel(room.id)}><span>{room.kind === 'broadcast' ? <Icon name="megaphone" size={12} /> : '#'}</span>{room.name}</button>)}{canManageHub && <button className="mobile-room-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)}><Icon name="plus" size={14} /></button>}</div>}
@@ -394,29 +425,56 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       {reply && !blockedConversation && <div className="replying-bar"><Icon name="reply" size={14} /><span>{t('replyBadge')} <b>{data.users[replyTargetMsg?.by ?? '']?.name ?? t('you')}</b></span><em>{replyTargetMsg?.text || replyTargetMsg?.sticker || replyTargetMsg?.poll?.question || '📷'}</em><button className="icon-btn" aria-label={t('cancel')} onClick={() => setReply(undefined)}><Icon name="close" size={13} /></button></div>}
 
       <form className="composer-wrap" onSubmit={submit}>
-        {emojiOpen && <div className="composer-emoji composer-vector-tray" role="group" aria-label={t('emoji')}>
-          {ownedStickerPacks.map((pack) => (
-            <div key={pack.id} className="composer-pack-group">
-              <small>{pack.name}</small>
-              <div className="composer-pack-row">
-                {pack.stickers?.map((badgeId, i) => <button key={`${pack.id}-${badgeId}-${i}`} type="button" title={pack.name} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: badgeId, reply }); setReply(undefined); setEmojiOpen(false); } catch (err) { report(err); } }}><VectorBadge id={badgeId} size="sm" /></button>)}
-              </div>
+        {emojiOpen && (
+          <div className="composer-drawer" role="group" aria-label={t('emoji')}>
+            <div className="composer-drawer-head">
+              <button type="button" className={emojiTab === 'vectors' ? 'active' : ''} onClick={() => setEmojiTab('vectors')}>
+                <Sparkles size={13} />
+                <span>{t('stickerTab')}</span>
+              </button>
+              <button type="button" className={emojiTab === 'emoji' ? 'active' : ''} onClick={() => setEmojiTab('emoji')}>
+                <Smile size={13} />
+                <span>{t('emojiTab')}</span>
+              </button>
             </div>
-          ))}
-          <div className="composer-pack-group">
-            <small>{t('stickers')}</small>
-            <div className="composer-pack-row">
-              {VECTOR_BADGES.slice(0, 12).map((badge) => (
-                <button key={badge.id} type="button" title={badge.label} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: badge.id, reply }); setReply(undefined); setEmojiOpen(false); } catch (err) { report(err); } }}>
-                  <VectorBadge id={badge.id} size="sm" />
-                </button>
-              ))}
+            <div className="composer-drawer-body">
+              {emojiTab === 'vectors' ? (
+                <>
+                  {ownedStickerPacks.map((pack) => (
+                    <div key={pack.id} className="composer-pack-group">
+                      <small>{pack.name}</small>
+                      <div className="composer-vector-grid">
+                        {pack.stickers?.map((badgeId, i) => (
+                          <button key={`${pack.id}-${badgeId}-${i}`} type="button" title={pack.name} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: badgeId, reply }); setReply(undefined); setEmojiOpen(false); } catch (err) { report(err); } }}>
+                            <VectorBadge id={badgeId} size="sm" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="composer-pack-group">
+                    <small>{t('stickers')}</small>
+                    <div className="composer-vector-grid">
+                      {VECTOR_BADGES.slice(0, 12).map((badge) => (
+                        <button key={badge.id} type="button" title={badge.label} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: badge.id, reply }); setReply(undefined); setEmojiOpen(false); } catch (err) { report(err); } }}>
+                          <VectorBadge id={badge.id} size="sm" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="composer-emoji-grid">
+                  {quickEmoji.map((emoji, i) => (
+                    <button key={`${emoji}${i}`} type="button" onClick={() => { setComposer((v) => v + emoji); setEmojiOpen(false); textareaRef.current?.focus(); }}>
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-          <div className="composer-pack-row">
-            {quickEmoji.map((emoji, i) => <button key={`${emoji}${i}`} type="button" onClick={() => { setComposer((v) => v + emoji); setEmojiOpen(false); textareaRef.current?.focus(); }}>{emoji}</button>)}
-          </div>
-        </div>}
+        )}
 
         {isSuspended ? <div className="blocked-composer-note">{t('suspendedNotice')}</div> : blockedConversation ? <div className="blocked-composer-note">{t('blockedConversationSub')}</div> : isBroadcastLocked ? <div className="blocked-composer-note"><Icon name="megaphone" size={15} /> {t('broadcastOnly')}</div> : <div className="composer-box">
           <div className="composer-rail">
@@ -440,7 +498,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       </form>
     </section>
 
-    {membersOpen && <aside className="members-drawer"><div className="members-head"><strong>{dm ? t('profile') : t('members')}</strong><button className="icon-btn" aria-label={t('cancel')} onClick={() => setMembersOpen(false)}><Icon name="close" size={16} /></button></div>{dm ? <><div className="profile-cover" style={bannerStyleFor(other)} /><div className="profile-aside-card"><Avatar user={other} size="lg" showStatus /><span className="member-presence">{t(other.presence)}</span><h2>{other.name}{hasAura(other.id) && <span className={`pro-flex-pill tier-${other.aura?.tier ?? 'ember'}`}>{other.aura?.tier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}{other.aura?.tier === 'nova' ? 'MAX' : 'PRO'}</span>}</h2><p className="profile-handle">@{other.username}</p>{other.bio && <p>{other.bio}</p>}{other.statusText && <p className="profile-status">“{other.statusText}”</p>}{!!other.profileTags?.length && <div className="tag-chips-list center">{other.profileTags.map((tag) => <span key={tag} className="profile-custom-tag"><Tag size={10} />{tag}</span>)}</div>}<div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(other.createdAt) })}</span>{other.inventory.length > 0 && <span>{t('collectionCount', { count: other.inventory.length })}</span>}{(other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0 })}</span>}</div><button className="btn btn-secondary btn-full" onClick={() => setMembersOpen(false)}>{t('backToApp')}</button></div></> : <><div className="member-list">{people.map((p) => <button key={p.id} className="member-row" onClick={() => { if (p.id !== user.id) { setChannel(startDM(user.id, p.id)); setMembersOpen(false); } }}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}</b><small>{p.statusText || t(p.presence)}</small></span>{activeHub?.members[p.id] === 'owner' && <span className="role-chip owner">{t('owner')}</span>}{activeHub?.members[p.id] === 'mod' && <span className="role-chip mod">{t('moderator')}</span>}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</button>)}</div><div className="member-drawer-actions">{canManageHub && <button className="btn btn-outline btn-small" onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={14} />{t('hubSettings')}</button>}<button className="btn btn-outline btn-small" onClick={async () => { const url = `${window.location.origin}/invite/${activeHub!.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={14} />{t('inviteCopy')}</button>{activeHub!.ownerId !== user.id && <button className="btn btn-ghost btn-small" onClick={() => { setMembersOpen(false); setLeaveOpen(true); }}><Icon name="back" size={14} />{t('leaveHub')}</button>}</div></>}</aside>}
+    {membersOpen && <aside className="members-drawer"><div className="members-head"><strong>{dm ? t('profile') : t('members')}</strong><button className="icon-btn" aria-label={t('cancel')} onClick={() => setMembersOpen(false)}><Icon name="close" size={16} /></button></div>{dm ? <ProfileExplorerContent target={other} viewer={user} db={data} variant="drawer" action={<button className="btn btn-secondary btn-full" onClick={() => setMembersOpen(false)}>{t('backToApp')}</button>} /> : <><div className="member-list">{people.map((p) => <button key={p.id} className="member-row" onClick={() => { if (p.id !== user.id) { setChannel(startDM(user.id, p.id)); setMembersOpen(false); } }}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}</b><small>{p.statusText || t(p.presence)}</small></span>{activeHub?.members[p.id] === 'owner' && <span className="role-chip owner">{t('owner')}</span>}{activeHub?.members[p.id] === 'mod' && <span className="role-chip mod">{t('moderator')}</span>}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</button>)}</div><div className="member-drawer-actions">{canManageHub && <button className="btn btn-outline btn-small" onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={14} />{t('hubSettings')}</button>}<button className="btn btn-outline btn-small" onClick={() => setInviteModalOpen(true)}><Icon name="link" size={14} />{t('inviteCopy')}</button>{activeHub!.ownerId !== user.id && <button className="btn btn-ghost btn-small" onClick={() => { setMembersOpen(false); setLeaveOpen(true); }}><Icon name="back" size={14} />{t('leaveHub')}</button>}</div></>}</aside>}
 
     <Modal open={pinnedOpen} onClose={() => setPinnedOpen(false)} title={t('pinnedMessages')} size="md">
       {pinned.length ? <div className="pinned-list">{pinned.map((pm) => <div key={pm.id} className="pinned-item">
@@ -468,9 +526,11 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
     </Modal>
 
     {activeHub && hubManageOpen && <HubSettingsModal open={hubManageOpen} onClose={() => setHubManageOpen(false)} hub={activeHub} db={data} user={user} />}
+    <HubInviteModal open={inviteModalOpen} onClose={() => setInviteModalOpen(false)} hub={activeHub} />
 
     <Modal open={!!confirmDelete} onClose={() => { setConfirmDelete(null); setConfirmDeleteEveryone(false); }} title={t('deleteConfirm')} subtitle={t(confirmDelete && canDeleteMessageForEveryone(confirmDelete.ch, confirmDelete, user.id) ? 'deleteConfirmSubOwn' : 'deleteConfirmSubOther')} size="sm">{confirmDelete && canDeleteMessageForEveryone(confirmDelete.ch, confirmDelete, user.id) && <label className="delete-everyone-toggle"><input type="checkbox" checked={confirmDeleteEveryone} onChange={(event) => setConfirmDeleteEveryone(event.target.checked)} /><span>{t('deleteForEveryone')}</span></label>}<div className="modal-actions"><button className="btn btn-secondary" onClick={() => { setConfirmDelete(null); setConfirmDeleteEveryone(false); }}>{t('cancel')}</button><button className="btn btn-danger" onClick={onDelete}>{t('delete')}</button></div></Modal>
     <Modal open={confirmClear} onClose={() => setConfirmClear(false)} title={t('clearHistory')} subtitle={t('clearHistoryConfirm')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setConfirmClear(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={clearConversation}>{t('clearHistory')}</button></div></Modal>
+    <Modal open={confirmDeleteChat} onClose={() => setConfirmDeleteChat(false)} title={t('deleteChat')} subtitle={t('deleteChatConfirm')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setConfirmDeleteChat(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={deleteChatNow}>{t('deleteChat')}</button></div></Modal>
     <Modal open={confirmBlock} onClose={() => !blockBusy && setConfirmBlock(false)} title={t(blockedConversation ? 'unblockUser' : 'blockUser')} subtitle={t(blockedConversation ? 'unblockConfirm' : 'blockConfirm', { name: other.name })} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setConfirmBlock(false)} disabled={blockBusy}>{t('cancel')}</button><button className={blockedConversation ? 'btn btn-primary' : 'btn btn-danger'} onClick={() => void confirmBlockChange()} disabled={blockBusy}>{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button></div></Modal>
     <Modal open={leaveOpen} onClose={() => setLeaveOpen(false)} title={t('leaveConfirm')} subtitle={t('leaveHubSub')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setLeaveOpen(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={() => void confirmLeaveHub()}>{t('leaveHub')}</button></div></Modal>
     <Modal open={newRoomOpen} onClose={() => setNewRoomOpen(false)} title={t('addRoom')} subtitle={t('newRoom')} size="sm"><form className="stack-form" onSubmit={createRoom}><label className="field-label">{t('newRoom')}<span className="input-prefix-wrap"><span className="input-prefix">#</span><input autoFocus className="field-input prefix-field" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="behind-the-scenes" maxLength={24} /></span></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setNewRoomOpen(false)}>{t('cancel')}</button><button className="btn btn-primary">{t('create')}</button></div></form></Modal>

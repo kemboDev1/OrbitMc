@@ -70,6 +70,11 @@ export function equipListing(userId: string, listingId: string): void {
       if (item.auraOnly && !getAura(user)) throw new AppError('auraLimit');
       user.frame = user.frame === listingId ? null : listingId;
     }
+    if (item.kind === 'bundle') {
+      const togglingOff = user.theme === listingId && user.frame === listingId;
+      user.theme = togglingOff ? null : listingId;
+      user.frame = togglingOff ? null : listingId;
+    }
     saveCosmetics(userId, {
       theme: user.theme,
       frame: user.frame,
@@ -96,6 +101,19 @@ export function giftListing(fromId: string, toId: string, listingId: string): vo
     from.sparks -= item.price;
     to.inventory.push(listingId);
     to.giftsReceived = [...(to.giftsReceived ?? []), listingId].slice(-200);
+    to.giftRecords = [
+      {
+        listingId,
+        listingName: item.name,
+        listingKind: item.kind,
+        fromId: from.id,
+        fromUsername: from.username,
+        fromName: from.name,
+        at: Date.now(),
+      },
+      ...(to.giftRecords ?? []),
+    ].slice(0, 60);
+    to.giftsReceivedCount = (to.giftsReceivedCount ?? 0) + 1;
     item.sales += 1;
     const seller = d.users[item.sellerId];
     if (seller && seller.id !== from.id) {
@@ -184,4 +202,16 @@ export function cancelAura(userId: string): void {
 export function hasAura(userId: string): boolean {
   const user = db.get().users[userId];
   return !!user && !!getAura(user);
+}
+
+export function computeOrbitXP(user: User): { xp: number; level: number; rank: string; nextLevelXp: number; progressPct: number } {
+  const giftCount = user.giftsReceivedCount ?? user.giftRecords?.length ?? user.giftsReceived?.length ?? 0;
+  const tierBonus = getAura(user)?.tier === 'nova' ? 600 : getAura(user)?.tier === 'flare' ? 350 : getAura(user) ? 180 : 0;
+  const xp = Math.max(20, user.inventory.length * 65 + giftCount * 160 + (user.profileTags?.length ?? 0) * 20 + tierBonus + Math.round(user.sparks / 5));
+  const level = Math.max(1, Math.floor(xp / 250) + 1);
+  const currentFloor = (level - 1) * 250;
+  const nextLevelXp = level * 250;
+  const progressPct = Math.min(100, Math.max(6, Math.round(((xp - currentFloor) / 250) * 100)));
+  const rank = level >= 12 ? 'Celestial' : level >= 7 ? 'Luminary' : level >= 4 ? 'Vanguard' : 'Explorer';
+  return { xp, level, rank, nextLevelXp, progressPct };
 }

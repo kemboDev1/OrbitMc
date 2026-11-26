@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Crown, ExternalLink, Sparkles, Tag } from 'lucide-react';
+import { BellOff, ExternalLink } from 'lucide-react';
 import type { Hub, User } from './data/types';
 import { db } from './data/db';
 import { session } from './data/session';
@@ -24,10 +24,11 @@ import { ChatScreen } from './components/ChatScreen';
 import { HubPage, CreateHubModal, PeoplePage } from './components/HubPages';
 import { BazaarPage } from './components/BazaarPage';
 import { AuraPage } from './components/AuraPage';
-import { SettingsPage, bannerStyleFor } from './components/SettingsPage';
+import { SettingsPage } from './components/SettingsPage';
 import { AdminPage } from './components/AdminPage';
 import { SearchModal } from './components/SearchModal';
 import { Modal } from './components/Modal';
+import { ProfileExplorerContent } from './components/ProfileExplorer';
 import { ToastHost, tell } from './components/Toast';
 import { isDesktop } from './lib/electron';
 import { useChatControls } from './data/chatControls';
@@ -138,7 +139,9 @@ export default function App() {
     window.addEventListener('sado:invite', handleInvite);
     window.addEventListener('orbit:nav', handleNav);
     const pathInvite = window.location.pathname.match(/^\/invite\/([a-z0-9]+)\/?$/i);
+    const queryInvite = new URLSearchParams(window.location.search).get('invite');
     if (pathInvite) { setInviteValue(pathInvite[1]); setInviteOpen(true); }
+    else if (queryInvite) { setInviteValue(queryInvite); setInviteOpen(true); }
     return () => {
       window.removeEventListener('sado:profile', handleProfile);
       window.removeEventListener('sado:invite', handleInvite);
@@ -295,7 +298,7 @@ export default function App() {
           <div className="side-section-title"><span>{t('directSection')}</span><button aria-label={t('newMessage')} title={t('newMessage')} onClick={() => setNewChatOpen(true)}><Icon name="plus" size={15} /></button></div>
           {visibleDms.map((item) => item.person && <button className={`dm-list-row ${channel === item.id && view === 'chats' ? 'selected' : ''}`} key={item.id} onClick={() => { setChannel(item.id); setView('chats'); setMobileListOpen(false); }}>
             <Avatar user={item.person} size="sm" showStatus />
-            <span className="dm-list-copy"><b>{item.person.name}</b><small>{item.last?.text || item.last?.sticker || item.last?.poll?.question || t('savedDM')}</small></span>
+            <span className="dm-list-copy"><b>{item.person.name}{chatControls.muted.includes(item.person.id) && <BellOff size={11} className="muted-inline-icon" />}</b><small>{item.last?.text || item.last?.sticker || item.last?.poll?.question || t('savedDM')}</small></span>
             {item.unseen && <i className="unread-dot" />}
             {item.last && <time>{fmtShort(item.last.ts, lang)}</time>}
           </button>)}
@@ -359,18 +362,7 @@ export default function App() {
     <SearchModal db={data} user={user} blockedUsers={chatControls.blocked} onSelect={(id) => { setChannel(id); setView('chats'); setMobileListOpen(false); }} />
     <Modal open={!!profileTarget} onClose={() => setProfileTarget(null)} title={t('profile')} subtitle={profileTarget ? `@${data.users[profileTarget]?.username ?? ''}` : ''} size="sm">{profileTarget && data.users[profileTarget] && (() => {
       const targetUser = data.users[profileTarget];
-      const targetPro = hasAura(targetUser.id);
-      return <div className={`profile-modal-card tpl-${targetUser.profileTemplate ?? 'halo'}`}>
-        <div className="profile-modal-cover" style={bannerStyleFor(targetUser)} />
-        <Avatar user={targetUser} size="xl" showStatus />
-        <h2 className={targetPro && targetUser.chatFont ? `font-${targetUser.chatFont}` : ''}>{targetUser.name}{targetPro && <span className={`pro-flex-pill tier-${targetUser.aura?.tier ?? 'ember'}`}>{targetUser.aura?.tier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}{targetUser.aura?.tier === 'nova' ? 'NOVA MAX' : 'ORBIT+'}</span>}{targetUser.isAdmin && <span className="admin-tag">{t('admin')}</span>}</h2>
-        <p>@{targetUser.username}</p>
-        {targetUser.bio && <p>{targetUser.bio}</p>}
-        {targetUser.statusText && <p className="profile-status">“{targetUser.statusText}”</p>}
-        {!!targetUser.profileTags?.length && <div className="tag-chips-list center">{targetUser.profileTags.map((tag) => <span key={tag} className="profile-custom-tag"><Tag size={10} />{tag}</span>)}</div>}
-        <div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(targetUser.createdAt) })}</span>{targetUser.inventory.length > 0 && <span>{t('collectionCount', { count: targetUser.inventory.length })}</span>}{(targetUser.giftsReceivedCount ?? targetUser.giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: targetUser.giftsReceivedCount ?? targetUser.giftsReceived?.length ?? 0 })}</span>}</div>
-        {profileTarget === user.id ? <button className="btn btn-outline btn-full" onClick={() => { setProfileTarget(null); toView('settings'); }}><Icon name="edit" size={15} />{t('editProfile')}</button> : <button className="btn btn-primary btn-full" onClick={() => { pickUser(targetUser); setProfileTarget(null); }}><Icon name="chat" size={15} />{t('dmFrom')}</button>}
-      </div>;
+      return <ProfileExplorerContent target={targetUser} viewer={user} db={data} variant="modal" action={profileTarget === user.id ? <button className="btn btn-outline btn-full" onClick={() => { setProfileTarget(null); toView('settings'); }}><Icon name="edit" size={15} />{t('editProfile')}</button> : <button className="btn btn-primary btn-full" onClick={() => { pickUser(targetUser); setProfileTarget(null); }}><Icon name="chat" size={15} />{t('dmFrom')}</button>} />;
     })()}</Modal>
     <ToastHost />
   </div>;

@@ -1,3 +1,4 @@
+import { Award, Palette, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { AuraTier, DB, Hub, User } from '../data/types';
 import {
@@ -27,6 +28,7 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
   const [tab, setTab] = useState<AdminTab>('overview');
   const [query, setQuery] = useState('');
   const [deleteHubTarget, setDeleteHubTarget] = useState<Hub | null>(null);
+  const [sparkAmount, setSparkAmount] = useState('500');
 
   const stats = useMemo(() => getWorkspaceStats(db), [db]);
   const users = useMemo(
@@ -117,7 +119,7 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
           <div className="admin-mini-list">
             {listings.slice(0, 5).map((l) => (
               <div className="admin-mini-row" key={l.id}>
-                <span className="admin-kind-dot">{l.kind === 'theme' ? '◐' : l.kind === 'frame' ? '◎' : '✨'}</span>
+                <span className="admin-kind-dot">{l.kind === 'theme' ? <Palette size={14} /> : l.kind === 'frame' ? <Sparkles size={14} /> : <Award size={14} />}</span>
                 <div><b>{l.name}</b><small>{l.price} {t('sparks')} · {l.sales} sales</small></div>
                 {l.featured && <span className="aura-pill">{t('featuredBadge')}</span>}
               </div>
@@ -161,7 +163,30 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
                 <option value="flare">{t('auraFlare')}</option>
                 <option value="nova">{t('auraNova')}</option>
               </select>
-              <button className="btn btn-outline btn-small" onClick={() => { adminAdjustSparks(user.id, u.id, 500); tell('+500', 'good'); }}>{t('adminAddSparks')}</button>
+              <div className="admin-spark-grant">
+                <input
+                  type="number"
+                  className="field-input admin-spark-input"
+                  aria-label={t('customAmount')}
+                  value={sparkAmount}
+                  onChange={(e) => setSparkAmount(e.target.value)}
+                  min={-99999}
+                  max={99999}
+                />
+                <button
+                  type="button"
+                  className="btn btn-outline btn-small"
+                  onClick={() => {
+                    const n = parseInt(sparkAmount, 10);
+                    if (!Number.isFinite(n) || n === 0) return;
+                    void Promise.resolve(adminAdjustSparks(user.id, u.id, n))
+                      .then(() => tell(`${n > 0 ? `+${n}` : n} ${t('sparks')}`, 'good'))
+                      .catch(() => tell(t('err.generic'), 'bad'));
+                  }}
+                >
+                  {t('grantBtn')}
+                </button>
+              </div>
               {u.id !== user.id && <>
                 <button className="btn btn-ghost btn-small" onClick={() => { adminToggleUserRole(user.id, u.id); tell(t('memberRoleUpdated'), 'good'); }}>{u.isAdmin ? t('adminRemoveAdmin') : t('adminMakeAdmin')}</button>
                 <button className={`btn btn-small ${u.suspended ? 'btn-outline' : 'btn-danger-outline'}`} onClick={() => { adminToggleSuspended(user.id, u.id); tell(t('presenceUpdated'), 'good'); }}>{u.suspended ? t('adminUnsuspend') : t('adminSuspend')}</button>
@@ -196,7 +221,7 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
       {listings.map((l) => (
         <div className={`admin-row ${l.removed ? 'is-suspended' : ''}`} key={l.id}>
           <div className="admin-row-main">
-            <span className="admin-kind-dot">{l.kind === 'theme' ? '◐' : l.kind === 'frame' ? '◎' : '✨'}</span>
+            <span className="admin-kind-dot">{l.kind === 'theme' ? <Palette size={14} /> : l.kind === 'frame' ? <Sparkles size={14} /> : <Award size={14} />}</span>
             <div className="admin-row-copy">
               <div className="admin-row-title">
                 <b>{l.name}</b>

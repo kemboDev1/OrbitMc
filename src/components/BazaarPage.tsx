@@ -117,7 +117,7 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
     </div>
 
     <div className="market-tools">
-      <div className="market-tabs">{(['all', 'theme', 'frame', 'stickers', 'owned', 'made'] as Kind[]).map((k) => <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>{k === 'all' ? t('allItems') : k === 'owned' ? t('bag') : k === 'made' ? t('yourShop') : t(k === 'theme' ? 'themes' : k === 'frame' ? 'frames' : 'stickers')}</button>)}</div>
+      <div className="market-tabs">{(['all', 'bundle', 'theme', 'frame', 'stickers', 'owned', 'made'] as Kind[]).map((k) => <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>{k === 'all' ? t('allItems') : k === 'owned' ? t('bag') : k === 'made' ? t('yourShop') : k === 'bundle' ? t('bundles') : t(k === 'theme' ? 'themes' : k === 'frame' ? 'frames' : 'stickers')}</button>)}</div>
       <div className="market-filters">
         <label className="market-search"><Icon name="search" size={16} /><input placeholder={t('searchMarket')} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
         <select className="sort-select" aria-label={t('filters')} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}><option value="featured">{t('featured')}</option><option value="latest">{t('latest')}</option><option value="popular">{t('popular')}</option><option value="low">{t('priceLow')}</option><option value="high">{t('priceHigh')}</option></select>
@@ -137,6 +137,11 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
           {l.kind === 'stickers' ? (
             <div className="sticker-preview vector-pack-preview">
               {l.stickers?.slice(0, 6).map((x, i) => <span className={`sticker-pos sticker-pos-${i + 1}`} key={`${x}${i}`}><VectorBadge id={x} size="md" /></span>)}
+            </div>
+          ) : l.kind === 'bundle' ? (
+            <div className="bundle-preview">
+              {l.theme && <div className="theme-preview bundle-theme" style={{ '--preview-bg': l.theme.bg, '--preview-panel': l.theme.panel, '--preview-raised': l.theme.raised, '--preview-line': l.theme.line, '--preview-accent': l.theme.accent } as React.CSSProperties}><span className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></span></div>}
+              {l.frame && <div className="frame-preview-clean bundle-frame"><span className={`frame-halo-ring ${l.frame.spin ? 'pulse' : ''}`} style={{ '--frame-a': l.frame.colors[0], '--frame-b': l.frame.colors[1] ?? l.frame.colors[0] } as React.CSSProperties} /><span className="frame-face-clean">{user.name.slice(0, 1).toUpperCase()}</span></div>}
             </div>
           ) : l.kind === 'theme' ? (
             <div className="theme-preview" style={{ '--preview-bg': l.theme?.bg, '--preview-panel': l.theme?.panel, '--preview-raised': l.theme?.raised, '--preview-line': l.theme?.line, '--preview-accent': l.theme?.accent } as React.CSSProperties}><span className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></span><span className="theme-name-preview">{listingName}</span></div>

@@ -4,10 +4,21 @@ import { db } from './db';
 import { AppError } from './errors';
 import { validateBio, validateName } from './auth';
 import type { Presence } from './types';
-import { updateRemoteProfile } from './cloud';
+import { updateRemoteProfile, setRemoteBirthday } from './cloud';
 import { saveCosmetics } from './cosmetics';
 
-export async function updateProfile(userId: string, input: { name: string; bio: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; profileTags?: string[]; profileTemplate?: 'clean' | 'halo' | 'frame' }): Promise<void> {
+export async function updateProfile(userId: string, input: {
+  name: string;
+  bio: string;
+  avatar?: string | null;
+  banner?: string | null;
+  profileStroke?: string | null;
+  profileTags?: string[];
+  profileTemplate?: 'clean' | 'halo' | 'frame';
+  birthday?: string;
+  birthdayVisible?: boolean;
+  hideGiftSenders?: boolean;
+}): Promise<void> {
   const name = validateName(input.name);
   const bio = validateBio(input.bio);
   const currentUser = db.get().users[userId];
@@ -20,15 +31,31 @@ export async function updateProfile(userId: string, input: { name: string; bio: 
   const tags = (input.profileTags ?? currentUser?.profileTags ?? []).map((tag) => tag.trim().replace(/\s+/g, ' ')).filter(Boolean);
   if (tags.length > 5 || tags.some((tag) => tag.length > 20 || !/^[\p{L}\p{N} _-]+$/u.test(tag))) throw new AppError('err.badText');
   if (input.profileTemplate !== undefined && !['clean', 'halo', 'frame'].includes(input.profileTemplate)) throw new AppError('err.badText');
+  if (input.birthday !== undefined && input.birthday !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(input.birthday)) throw new AppError('err.badText');
   if (currentUser.serverBacked) {
     saveCosmetics(userId, {
       ...(input.banner !== undefined ? { banner: input.banner ?? undefined } : {}),
       ...(input.profileStroke !== undefined ? { profileStroke: input.profileStroke ?? undefined } : {}),
       ...(input.profileTags !== undefined ? { profileTags: tags } : {}),
       ...(input.profileTemplate !== undefined ? { profileTemplate: input.profileTemplate } : {}),
+      ...(input.birthday !== undefined ? { birthday: input.birthday || undefined } : {}),
+      ...(input.birthdayVisible !== undefined ? { birthdayVisible: input.birthdayVisible } : {}),
+      ...(input.hideGiftSenders !== undefined ? { hideGiftSenders: input.hideGiftSenders } : {}),
     });
     const remoteBanner = input.banner && input.banner.startsWith('grad:') ? undefined : input.banner;
-    await updateRemoteProfile(userId, { name, bio, avatar: input.avatar, banner: remoteBanner, profileStroke: input.profileStroke, profileTags: input.profileTags === undefined ? undefined : tags, profileTemplate: input.profileTemplate });
+    await updateRemoteProfile(userId, {
+      name,
+      bio,
+      avatar: input.avatar,
+      banner: remoteBanner,
+      profileStroke: input.profileStroke,
+      profileTags: input.profileTags === undefined ? undefined : tags,
+      profileTemplate: input.profileTemplate,
+      hideGiftSenders: input.hideGiftSenders,
+    });
+    if (input.birthday !== undefined || input.birthdayVisible !== undefined) {
+      await setRemoteBirthday(userId, input.birthday, input.birthdayVisible);
+    }
     return;
   }
   db.transaction((d) => {
@@ -43,6 +70,9 @@ export async function updateProfile(userId: string, input: { name: string; bio: 
     if (input.profileStroke !== undefined) user.profileStroke = input.profileStroke ?? undefined;
     if (input.profileTags !== undefined) user.profileTags = tags;
     if (input.profileTemplate !== undefined) user.profileTemplate = input.profileTemplate;
+    if (input.birthday !== undefined) user.birthday = input.birthday || undefined;
+    if (input.birthdayVisible !== undefined) user.birthdayVisible = input.birthdayVisible;
+    if (input.hideGiftSenders !== undefined) user.hideGiftSenders = input.hideGiftSenders;
   });
 }
 

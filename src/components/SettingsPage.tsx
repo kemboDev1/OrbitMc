@@ -1,11 +1,12 @@
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Crown, Sparkles, Tag, Type, Wand2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Cake, Crown, EyeOff, Sparkles, Tag, Type, Wand2 } from 'lucide-react';
 import type { User } from '../data/types';
 import { updateAccent, updateProFlex, updateProfile } from '../data/profile';
 import { session } from '../data/session';
 import { signOut } from '../data/auth';
 import { isAdminUser, toggleSelfAdminPreview } from '../data/admin';
-import { hasAura } from '../data/market';
+import { computeOrbitXP, hasAura } from '../data/market';
+import { fetchPublicProfileDetails } from '../data/cloud';
 import { db } from '../data/db';
 import { prefs, themeMode } from '../lib/prefs';
 import { fileToDataUrl } from '../lib/image';
@@ -52,7 +53,20 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
   const [profileTemplate, setProfileTemplate] = useState<'clean' | 'halo' | 'frame'>(user.profileTemplate ?? 'halo');
   const [chatFont, setChatFont] = useState<'sans' | 'display' | 'mono' | 'serif'>(user.chatFont ?? 'sans');
   const [messageEffect, setMessageEffect] = useState<'none' | 'glow' | 'aurora' | 'ember'>(user.messageEffect ?? 'none');
+  const [birthday, setBirthday] = useState(user.birthday ?? '');
+  const [birthdayVisible, setBirthdayVisible] = useState(user.birthdayVisible ?? true);
+  const [hideGiftSenders, setHideGiftSenders] = useState(user.hideGiftSenders ?? false);
   const [saveBusy, setSaveBusy] = useState(false);
+
+  useEffect(() => {
+    if (!user.serverBacked) return;
+    void fetchPublicProfileDetails(user.id).then((details) => {
+      if (!details) return;
+      if (details.birthday !== undefined) setBirthday(details.birthday);
+      if (details.birthdayVisible !== undefined) setBirthdayVisible(details.birthdayVisible);
+      if (details.hideGiftSenders !== undefined) setHideGiftSenders(details.hideGiftSenders);
+    });
+  }, [user.id, user.serverBacked]);
   const [resetOpen, setResetOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [device, setDevice] = useState<'ios' | 'android' | 'computer'>('computer');
@@ -81,6 +95,9 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
         profileStroke: profileStroke || null,
         profileTags,
         profileTemplate,
+        birthday,
+        birthdayVisible,
+        hideGiftSenders,
       });
       if (isPro) {
         updateProFlex(user.id, { chatFont, messageEffect });
@@ -173,11 +190,12 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
                   {isPro && <span className={`pro-flex-pill tier-${user.aura?.tier ?? 'ember'}`}>{user.aura?.tier === 'nova' ? <Crown size={11} /> : <Sparkles size={11} />}{user.aura?.tier === 'nova' ? 'NOVA MAX' : `ORBIT+ ${user.aura?.tier.toUpperCase()}`}</span>}
                   {adminOn && <span className="admin-tag">{t('admin')}</span>}
                 </div>
-                <small>@{user.username} · {user.sparks.toLocaleString(lang)} {t('sparks')}</small>
+                <small>@{user.username} · {user.sparks.toLocaleString(lang)} {t('sparks')} · {t('orbitXp')} {computeOrbitXP(user).xp}</small>
                 <div className="profile-showcase-pills">
                   {profileTags.map((tag) => (
                     <span key={tag} className="profile-custom-tag"><Tag size={10} />{tag}</span>
                   ))}
+                  <span>{t('orbitXp')} Lv.{computeOrbitXP(user).level}</span>
                   <span>{t('collectionCount', { count: user.inventory.length })}</span>
                 </div>
               </div>
@@ -231,6 +249,22 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
                 </div>
               </div>
 
+              <div className="auth-two-col">
+                <label className="field-label"><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Cake size={13} />{t('birthdayLabel')}</span>
+                  <input type="date" className="field-input" value={birthday} onChange={(e) => setBirthday(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
+                </label>
+                <div className="field-label"><span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><EyeOff size={13} />{t('hideGiftSenders')}</span>
+                  <label className="creator-motion" style={{ minHeight: 40, padding: '0 10px' }}>
+                    <input type="checkbox" checked={hideGiftSenders} onChange={(e) => setHideGiftSenders(e.target.checked)} />
+                    <span>{t('hideGiftSenders')}</span>
+                  </label>
+                </div>
+              </div>
+              <label className="creator-motion" style={{ minHeight: 38, padding: '0 10px' }}>
+                <input type="checkbox" checked={birthdayVisible} onChange={(e) => setBirthdayVisible(e.target.checked)} />
+                <span>{t('birthdayPublic')}</span>
+              </label>
+
               <div className="pro-flex-box">
                 <div className="pro-flex-head"><Wand2 size={15} /><strong>{t('auraFeatures')}</strong>{!isPro && <span className="pill-mini">ORBIT+ PRO</span>}</div>
                 <div className="auth-two-col">
@@ -268,7 +302,10 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
           <ToggleRow title={t('memberToggle')} subtitle={t('members')} value={pr.members} onChange={(v) => prefs.set({ members: v })} />
         </section>
 
-        <section className="settings-section privacy-section" id="privacy"><div className="settings-section-head"><span className="section-index">04</span><div><h2>{t('privacy')}</h2><p>{t('privacyHeading')}</p></div></div><div className="privacy-notice"><span className="privacy-icon"><Icon name="shield" size={18} /></span><div><b>{t('privacyHeading')}</b><p>{t('privacyDemo')}</p><p>{t('privacyAuth')}</p></div></div><div className="privacy-warning"><Icon name="info" size={16} /><p>{t('privacyWarning')}</p></div><div className="future-note"><span className="eyebrow">{t('launchLabel')}</span><p>{t('privacyLive')}</p></div></section>
+        <section className="settings-section privacy-section" id="privacy"><div className="settings-section-head"><span className="section-index">04</span><div><h2>{t('privacy')}</h2><p>{t('privacyHeading')}</p></div></div>
+          <ToggleRow title={t('hideGiftSenders')} subtitle={t('hideGiftSendersSub')} value={hideGiftSenders} onChange={(v) => { setHideGiftSenders(v); void updateProfile(user.id, { name, bio, hideGiftSenders: v }).then(() => tell(t('profileSaved'), 'good')).catch(() => tell(t('err.saveFailed'), 'bad')); }} />
+          <ToggleRow title={t('birthdayPublic')} subtitle={t('birthdayLabel')} value={birthdayVisible} onChange={(v) => { setBirthdayVisible(v); void updateProfile(user.id, { name, bio, birthdayVisible: v }).then(() => tell(t('profileSaved'), 'good')).catch(() => tell(t('err.saveFailed'), 'bad')); }} />
+          <div className="privacy-notice"><span className="privacy-icon"><Icon name="shield" size={18} /></span><div><b>{t('privacyHeading')}</b><p>{t('privacyDemo')}</p><p>{t('privacyAuth')}</p></div></div><div className="privacy-warning"><Icon name="info" size={16} /><p>{t('privacyWarning')}</p></div><div className="future-note"><span className="eyebrow">{t('launchLabel')}</span><p>{t('privacyLive')}</p></div></section>
 
         <section className="settings-section" id="data"><div className="settings-section-head"><span className="section-index">05</span><div><h2>{t('dataTools')}</h2><p>{t('storage')}: {storageText}</p></div></div>
           <div className="data-actions">

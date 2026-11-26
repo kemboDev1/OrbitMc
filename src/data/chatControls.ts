@@ -1,7 +1,9 @@
 import { createStore } from '../lib/store';
+import { db } from './db';
 
 interface LocalChatControls {
   muted: string[];
+  mutedUntil?: Record<string, number>;
   blocked: string[];
   remoteBlocked?: string[];
   clearedAt: Record<string, number>;
@@ -16,6 +18,7 @@ const validState = (value: unknown): value is ControlState => {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return false;
     const item = entry as Partial<LocalChatControls>;
     return Array.isArray(item.muted) && item.muted.every((id) => typeof id === 'string' && id.length <= 100)
+      && (item.mutedUntil === undefined || (typeof item.mutedUntil === 'object' && item.mutedUntil !== null && !Array.isArray(item.mutedUntil)))
       && Array.isArray(item.blocked) && item.blocked.every((id) => typeof id === 'string' && id.length <= 100)
       && (item.remoteBlocked === undefined || Array.isArray(item.remoteBlocked) && item.remoteBlocked.every((id) => typeof id === 'string' && id.length <= 100))
       && typeof item.clearedAt === 'object' && item.clearedAt !== null && !Array.isArray(item.clearedAt)
@@ -28,14 +31,26 @@ const validState = (value: unknown): value is ControlState => {
 const controls = createStore<ControlState>({}, 'orbitmc:chat-controls', validState);
 
 function forUser(userId: string): LocalChatControls {
-  return controls.get()[userId] ?? { muted: [], blocked: [], remoteBlocked: [], clearedAt: {}, hiddenMessages: {} };
+  return controls.get()[userId] ?? { muted: [], mutedUntil: {}, blocked: [], remoteBlocked: [], clearedAt: {}, hiddenMessages: {} };
 }
 
 function update(userId: string, change: (current: LocalChatControls) => LocalChatControls): void {
   controls.set((state) => ({ ...state, [userId]: change(forUser(userId)) }));
 }
 
-export const isMuted = (userId: string, otherId: string) => forUser(userId).muted.includes(otherId);
+export function getMuteUntil(userId: string, otherId: string): number {
+  const cur = forUser(userId);
+  const until = cur.mutedUntil?.[otherId];
+  if (typeof until === 'number') {
+    if (until < 0) return -1; // forever
+    if (until > Date.now()) return until;
+    return 0;
+  }
+  return cur.muted.includes(otherId) ? -1 : 0;
+}
+
+export const isMuted = (userId: string, otherId: string) => getMuteUntil(userId, otherId) !== 0;
+
 export const isBlocked = (userId: string, otherId: string) => {
   const current = forUser(userId);
   return current.blocked.includes(otherId) || (current.remoteBlocked ?? []).includes(otherId);
@@ -46,14 +61,31 @@ export const isMessageHidden = (userId: string, channel: string, messageId: stri
 export function useChatControls(userId: string): LocalChatControls {
   controls.use();
   const current = forUser(userId);
-  return { ...current, blocked: [...new Set([...current.blocked, ...(current.remoteBlocked ?? [])])] };
+  const now = Date.now();
+  const activeMuted = [...new Set([
+    ...current.muted.filter((id) => {
+      const u = current.mutedUntil?.[id];
+      return u === undefined || u < 0 || u > now;
+    }),
+    ...Object.entries(current.mutedUntil ?? {}).filter(([, until]) => until < 0 || until > now).map(([id]) => id),
+  ])];
+  return { ...current, muted: activeMuted, blocked: [...new Set([...current.blocked, ...(current.remoteBlocked ?? [])])] };
+}
+
+export function setMutedFor(userId: string, otherId: string, durationMs: number | 'forever' | 0): void {
+  update(userId, (current) => {
+    const nextUntil = { ...(current.mutedUntil ?? {}) };
+    if (durationMs === 0) {
+      delete nextUntil[otherId];
+      return { ...current, muted: current.muted.filter((id) => id !== otherId), mutedUntil: nextUntil };
+    }
+    nextUntil[otherId] = durationMs === 'forever' ? -1 : Date.now() + durationMs;
+    return { ...current, muted: [...new Set([...current.muted, otherId])], mutedUntil: nextUntil };
+  });
 }
 
 export function setMuted(userId: string, otherId: string, muted: boolean): void {
-  update(userId, (current) => ({
-    ...current,
-    muted: muted ? [...new Set([...current.muted, otherId])] : current.muted.filter((id) => id !== otherId),
-  }));
+  setMutedFor(userId, otherId, muted ? 'forever' : 0);
 }
 
 export function setBlocked(userId: string, otherId: string, blocked: boolean): void {
@@ -81,6 +113,18 @@ export function clearHistory(userId: string, channel: string): number | undefine
   const previous = forUser(userId).clearedAt[channel];
   update(userId, (current) => ({ ...current, clearedAt: { ...current.clearedAt, [channel]: Date.now() } }));
   return previous;
+}
+
+export function deleteConversation(userId: string, channel: string): void {
+  clearHistory(userId, channel);
+  db.transaction((state) => {
+    if (state.dms[userId]) {
+      state.dms[userId] = state.dms[userId].filter((id) => id !== channel);
+    }
+    if (!channel.startsWith('dm:') || !state.users[userId]?.serverBacked) {
+      delete state.msgs[channel];
+    }
+  });
 }
 
 export function restoreHistory(userId: string, channel: string, previous: number | undefined): void {

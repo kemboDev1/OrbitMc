@@ -1,6 +1,7 @@
 import { db } from './db';
 import { AppError } from './errors';
 import { saveCosmetics } from './cosmetics';
+import { adminRemoteGrantSparks } from './cloud';
 import type { AuraTier, DB, ID, User } from './types';
 
 export function isAdminUser(user?: User | null): boolean {
@@ -41,12 +42,23 @@ export function adminGrantAura(actorId: ID, targetUserId: ID, tier: AuraTier | n
   });
 }
 
-export function adminAdjustSparks(actorId: ID, targetUserId: ID, delta: number): void {
+export async function adminAdjustSparks(actorId: ID, targetUserId: ID, delta: number): Promise<void> {
+  const state = db.get();
+  const actor = state.users[actorId];
+  const target = state.users[targetUserId];
+  if (!isAdminUser(actor) || !target || !Number.isFinite(delta)) throw new AppError('err.notMember');
+  const cleanDelta = Math.round(delta);
+  if (actor.serverBacked && target.serverBacked) {
+    const nextBalance = await adminRemoteGrantSparks(targetUserId, cleanDelta);
+    db.transaction((d) => {
+      if (d.users[targetUserId]) d.users[targetUserId].sparks = nextBalance;
+    });
+    return;
+  }
   db.transaction((d) => {
-    const actor = d.users[actorId];
-    const target = d.users[targetUserId];
-    if (!isAdminUser(actor) || !target || !Number.isFinite(delta)) throw new AppError('err.notMember');
-    target.sparks = Math.max(0, Math.min(99_999, Math.round(target.sparks + delta)));
+    const u = d.users[targetUserId];
+    if (!u) throw new AppError('err.notMember');
+    u.sparks = Math.max(0, Math.min(99_999, u.sparks + cleanDelta));
   });
 }
 

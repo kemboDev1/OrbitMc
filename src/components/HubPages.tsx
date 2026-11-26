@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react';
+import { Check, Copy, Link2, Sparkles, User as UserIcon } from 'lucide-react';
 import type { DB, Hub, Role, User } from '../data/types';
 import { HUB_TEMPLATES, addRoom, joinHub, kickHubMember, makeHub, removeRoom, setHubMemberRole, updateHub, updateRoom, type HubTemplateKey } from '../data/hubs';
-import { hasAura } from '../data/market';
+import { computeOrbitXP, hasAura } from '../data/market';
 import { fmtShort } from '../lib/util';
 import { useI18n } from '../i18n';
 import { Avatar, AvatarPile } from './Avatar';
@@ -260,7 +261,75 @@ export function PeoplePage({ db, user, onChat }: { db: DB; user: User; onChat: (
   const others = useMemo(() => Object.values(db.users).filter((p) => (p.serverBacked || (!p.bot && p.id !== 'orbit-studio')) && p.id !== user.id && `${p.name} ${p.username}`.toLowerCase().includes(q.toLowerCase())), [db.users, user.id, q]);
   return <div className="page-content people-page">
     <div className="page-heading"><div><div className="eyebrow">{t('goodPeople')}</div><h1>{t('people')}</h1><p>{t('welcomeSub')}</p></div><label className="page-search"><Icon name="search" size={17} /><input placeholder={t('search')} value={q} onChange={(e) => setQ(e.target.value)} /></label></div>
-    {others.length ? <div className="people-list">{others.map((p) => <button key={p.id} className="person-card" onClick={() => onChat(p.id)}><Avatar user={p} size="lg" showStatus /><div className="person-card-info"><h3>{p.name}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</h3><small>@{p.username}</small><p>{p.statusText || p.bio || t('welcomeSub')}</p></div><span className="person-presence"><i className={`status-mini status-${p.presence}`} />{t(p.presence)}</span><Icon name="chevron" size={16} /></button>)}</div> : <div className="inline-empty"><div className="empty-mark"><HubSymbol mark="icon:users" size={20} /></div><p>{t('noPeople')}</p></div>}
+    {others.length ? <div className="people-list">{others.map((p) => {
+      const xp = computeOrbitXP(p);
+      return (
+        <div key={p.id} className="person-card">
+          <button type="button" className="person-card-profile-hit" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: p.id }))} title={t('profile')}>
+            <Avatar user={p} size="lg" showStatus />
+            <div className="person-card-info">
+              <h3>{p.name}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}<span className="pill-mini">Lv.{xp.level}</span></h3>
+              <small>@{p.username} · {t('orbitXp')} {xp.xp}</small>
+              <p>{p.statusText || p.bio || t('welcomeSub')}</p>
+            </div>
+          </button>
+          <span className="person-presence"><i className={`status-mini status-${p.presence}`} />{t(p.presence)}</span>
+          <div className="person-card-actions">
+            <button type="button" className="btn btn-outline btn-small" title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: p.id }))}><UserIcon size={14} /></button>
+            <button type="button" className="btn btn-primary btn-small" onClick={() => onChat(p.id)}><Icon name="chat" size={14} /></button>
+          </div>
+        </div>
+      );
+    })}</div> : <div className="inline-empty"><div className="empty-mark"><HubSymbol mark="icon:users" size={20} /></div><p>{t('noPeople')}</p></div>}
     <p className="demo-helper">{t('demoNote')}</p>
   </div>;
+}
+
+export function HubInviteModal({ open, onClose, hub }: { open: boolean; onClose: () => void; hub: Hub | null }) {
+  const { t } = useI18n();
+  const [copiedWhat, setCopiedWhat] = useState<'link' | 'code' | null>(null);
+  if (!hub) return null;
+  const shareUrl = `${window.location.origin}/?invite=${encodeURIComponent(hub.invite)}`;
+  const copy = async (value: string, what: 'link' | 'code') => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedWhat(what);
+      tell(t(what === 'link' ? 'inviteCopied' : 'codeCopied'), 'good');
+      setTimeout(() => setCopiedWhat((cur) => (cur === what ? null : cur)), 1800);
+    } catch {
+      tell(value, 'info');
+    }
+  };
+  return (
+    <Modal open={open} onClose={onClose} title={hub.name} subtitle={`${Object.keys(hub.members).length} ${t('members').toLowerCase()} · ${hub.public ? t('publicHub') : t('privateHub')}`} size="sm">
+      <div className="stack-form">
+        <div className="invite-code-card">
+          <div className="invite-code-meta">
+            <span><Sparkles size={13} /> {t('inviteCodeLabel')}</span>
+            <strong>{hub.invite}</strong>
+          </div>
+          <button type="button" className="btn btn-outline btn-small" onClick={() => void copy(hub.invite, 'code')}>
+            {copiedWhat === 'code' ? <Check size={14} /> : <Copy size={14} />}
+            <span>{t('inviteCopyCode')}</span>
+          </button>
+        </div>
+
+        <label className="field-label">
+          <span>{t('inviteLinkLabel')}</span>
+          <div className="invite-link-row">
+            <input
+              readOnly
+              className="field-input"
+              value={shareUrl}
+              onClick={(e) => e.currentTarget.select()}
+            />
+            <button type="button" className="btn btn-primary btn-small" onClick={() => void copy(shareUrl, 'link')}>
+              {copiedWhat === 'link' ? <Check size={14} /> : <Link2 size={14} />}
+              <span>{t('copy')}</span>
+            </button>
+          </div>
+        </label>
+      </div>
+    </Modal>
+  );
 }

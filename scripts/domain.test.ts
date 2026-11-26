@@ -4,11 +4,12 @@ import { enterDemoWorkspace, register, validateBio, validateName, validatePasswo
 import { sendMessage, addReaction, editMessage, pinMessage, deleteMessage, startDM, canPostInChannel, votePoll } from '../src/data/chat';
 import { db } from '../src/data/db';
 import { chronologicalRemoteHistory } from '../src/data/cloud';
-import { clearHistory, hiddenBefore, hideMessage, isBlocked, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setMuted } from '../src/data/chatControls';
+import { clearHistory, deleteConversation, getMuteUntil, hiddenBefore, hideMessage, isBlocked, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setMuted, setMutedFor } from '../src/data/chatControls';
 import { AppError } from '../src/data/errors';
 import { addRoom, joinInvite, kickHubMember, leaveHub, makeHub, setHubMemberRole, updateHub, updateRoom } from '../src/data/hubs';
 import { adminAdjustSparks, adminGrantAura, adminToggleListingFeatured, adminToggleSuspended, getWorkspaceStats, isAdminUser } from '../src/data/admin';
-import { buyListing, cancelAura, claimDaily, createListing, equipListing, giftListing, hasAura, subscribeAura } from '../src/data/market';
+import { buyListing, cancelAura, claimDaily, computeOrbitXP, createListing, equipListing, giftListing, hasAura, subscribeAura } from '../src/data/market';
+import { updateProfile } from '../src/data/profile';
 import type { User } from '../src/data/types';
 import { releaseAssetFor, type ReleaseAsset } from '../src/lib/downloads';
 
@@ -188,8 +189,8 @@ test('demo workspace, hub templates, polls, broadcast permissions, and admin act
 
   adminGrantAura(demo.id, member.id, 'nova');
   assert.equal(hasAura(member.id), true);
-  adminAdjustSparks(demo.id, member.id, 500);
-  assert.equal(db.get().users[member.id].sparks, 800);
+  await adminAdjustSparks(demo.id, member.id, 1250);
+  assert.equal(db.get().users[member.id].sparks, 1550);
   adminToggleSuspended(demo.id, member.id);
   assert.equal(canPostInChannel(generalRoom.id, member.id), false, 'suspended users cannot post');
   kickHubMember(teamHub.id, demo.id, member.id);
@@ -198,4 +199,17 @@ test('demo workspace, hub templates, polls, broadcast permissions, and admin act
   assert.equal(adminToggleListingFeatured(demo.id, 'orbit_theme_nightglass'), true);
   const stats = getWorkspaceStats(db.get());
   assert.ok(stats.totalHubs >= 2 && stats.totalUsers >= 4);
+
+  await updateProfile(member.id, { name: member.name, bio: member.bio, birthday: '2001-05-14', birthdayVisible: true, hideGiftSenders: true });
+  assert.equal(db.get().users[member.id].birthday, '2001-05-14');
+  assert.equal(db.get().users[member.id].hideGiftSenders, true);
+  const xp = computeOrbitXP(db.get().users[member.id]);
+  assert.ok(xp.xp > 600 && xp.level >= 2);
+
+  setMutedFor(demo.id, member.id, 3_600_000);
+  assert.equal(isMuted(demo.id, member.id), true);
+  assert.ok(getMuteUntil(demo.id, member.id) > Date.now());
+  const dmId = startDM(demo.id, member.id);
+  deleteConversation(demo.id, dmId);
+  assert.equal((db.get().dms[demo.id] ?? []).includes(dmId), false);
 });

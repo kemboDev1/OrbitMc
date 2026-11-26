@@ -14,6 +14,9 @@ export interface UserCosmetics {
   profileStroke?: string;
   profileTags?: string[];
   profileTemplate?: 'clean' | 'halo' | 'frame';
+  birthday?: string;
+  birthdayVisible?: boolean;
+  hideGiftSenders?: boolean;
 }
 
 type CosmeticsMap = Record<ID, UserCosmetics>;

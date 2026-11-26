@@ -17,6 +17,9 @@ interface ProfileRow {
   profile_stroke?: string | null;
   profile_tags?: string[] | null;
   profile_template?: 'clean' | 'halo' | 'frame' | null;
+  hide_gift_senders?: boolean | null;
+  chat_font?: 'sans' | 'display' | 'mono' | 'serif' | null;
+  message_effect?: 'none' | 'glow' | 'aurora' | 'ember' | null;
   presence: Presence;
   status_text: string;
   created_at: string;
@@ -73,7 +76,11 @@ function mapMarketListing(row: MarketRow, previous?: Listing): Listing {
     id: row.id,
     kind: row.kind,
     name: row.name,
+    nameUz: typeof design.nameUz === 'string' ? design.nameUz : previous?.nameUz,
+    nameRu: typeof design.nameRu === 'string' ? design.nameRu : previous?.nameRu,
     about: row.about,
+    aboutUz: typeof design.aboutUz === 'string' ? design.aboutUz : previous?.aboutUz,
+    aboutRu: typeof design.aboutRu === 'string' ? design.aboutRu : previous?.aboutRu,
     price: row.price,
     sellerId: row.seller_id ?? 'orbit-studio',
     sales: row.sales,
@@ -82,8 +89,8 @@ function mapMarketListing(row: MarketRow, previous?: Listing): Listing {
     featured: row.featured === true || previous?.featured === true,
     removed: !row.active,
     stickers: row.kind === 'stickers' && Array.isArray(design.stickers) ? design.stickers as string[] : previous?.stickers,
-    theme: row.kind === 'theme' ? design as unknown as ThemeData : undefined,
-    frame: row.kind === 'frame' ? design as unknown as FrameData : undefined,
+    theme: row.kind === 'theme' ? design as unknown as ThemeData : row.kind === 'bundle' && design.theme ? design.theme as unknown as ThemeData : undefined,
+    frame: row.kind === 'frame' ? design as unknown as FrameData : row.kind === 'bundle' && design.frame ? design.frame as unknown as FrameData : undefined,
     remote: true,
   };
 }
@@ -170,8 +177,12 @@ function toUser(row: ProfileRow, previous?: User): User {
     profileStroke: row.profile_stroke ?? previous?.profileStroke ?? saved?.profileStroke,
     profileTags: row.profile_tags ?? previous?.profileTags ?? saved?.profileTags,
     profileTemplate: row.profile_template ?? previous?.profileTemplate ?? saved?.profileTemplate,
-    chatFont: previous?.chatFont ?? saved?.chatFont,
-    messageEffect: previous?.messageEffect ?? saved?.messageEffect,
+    hideGiftSenders: row.hide_gift_senders ?? previous?.hideGiftSenders ?? saved?.hideGiftSenders,
+    birthday: previous?.birthday ?? saved?.birthday,
+    birthdayVisible: previous?.birthdayVisible ?? saved?.birthdayVisible,
+    giftRecords: previous?.giftRecords,
+    chatFont: row.chat_font ?? previous?.chatFont ?? saved?.chatFont,
+    messageEffect: row.message_effect ?? previous?.messageEffect ?? saved?.messageEffect,
     presence: row.presence,
     statusText: row.status_text,
     createdAt: new Date(row.created_at).getTime(),
@@ -553,7 +564,7 @@ export function subscribeRemoteWorkspace(userId: string, onError: (error: Error)
   return () => { void client.removeChannel(channel); };
 }
 
-export async function updateRemoteProfile(userId: string, values: { name?: string; bio?: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; profileTags?: string[]; profileTemplate?: 'clean' | 'halo' | 'frame'; presence?: Presence; statusText?: string }) {
+export async function updateRemoteProfile(userId: string, values: { name?: string; bio?: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; profileTags?: string[]; profileTemplate?: 'clean' | 'halo' | 'frame'; hideGiftSenders?: boolean; chatFont?: 'sans' | 'display' | 'mono' | 'serif'; messageEffect?: 'none' | 'glow' | 'aurora' | 'ember'; presence?: Presence; statusText?: string }) {
   const client = requireSupabase();
   const update: Record<string, unknown> = {};
   if (values.name !== undefined) update.display_name = values.name;
@@ -563,12 +574,79 @@ export async function updateRemoteProfile(userId: string, values: { name?: strin
   if (values.profileStroke !== undefined) update.profile_stroke = values.profileStroke;
   if (values.profileTags !== undefined) update.profile_tags = values.profileTags;
   if (values.profileTemplate !== undefined) update.profile_template = values.profileTemplate;
+  if (values.hideGiftSenders !== undefined) update.hide_gift_senders = values.hideGiftSenders;
+  if (values.chatFont !== undefined) update.chat_font = values.chatFont;
+  if (values.messageEffect !== undefined) update.message_effect = values.messageEffect;
   if (values.presence !== undefined) update.presence = values.presence;
   if (values.statusText !== undefined) update.status_text = values.statusText;
   const { data, error } = await client.from('profiles').update(update).eq('id', userId).select('*').single();
   if (error || !data) throw new AppError('err.profileUpdateFailed');
   const row = data as ProfileRow;
   db.transaction((state) => { state.users[userId] = toUser(row, state.users[userId]); });
+}
+
+export async function setRemoteBirthday(userId: string, birthDate?: string, visible?: boolean): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc('set_my_birthday', {
+    next_birth_date: birthDate === undefined ? null : (birthDate || ''),
+    next_visible: visible === undefined ? null : visible,
+  });
+  if (error && error.code !== 'PGRST202') throw new AppError('err.profileUpdateFailed');
+  db.transaction((state) => {
+    const u = state.users[userId];
+    if (!u) return;
+    if (birthDate !== undefined) u.birthday = birthDate || undefined;
+    if (visible !== undefined) u.birthdayVisible = visible;
+  });
+}
+
+export async function fetchPublicProfileDetails(targetUserId: string): Promise<{
+  birthday?: string;
+  birthdayVisible?: boolean;
+  hideGiftSenders?: boolean;
+  gifts: { listingId: string; listingName: string; listingKind: ListingKind; fromId: string | null; fromUsername: string | null; fromName: string | null; at: number }[];
+} | null> {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('get_public_profile_details', { target_user_id: targetUserId });
+  if (error || !data || typeof data !== 'object') return null;
+  const payload = data as {
+    birth_date?: string | null;
+    birthday_visible?: boolean;
+    hide_gift_senders?: boolean;
+    gifts?: { listing_id: string; listing_name: string; listing_kind: ListingKind; from_id: string | null; from_username: string | null; from_name: string | null; created_at: string }[];
+  };
+  const gifts = (payload.gifts ?? []).map((g) => ({
+    listingId: g.listing_id,
+    listingName: g.listing_name,
+    listingKind: g.listing_kind,
+    fromId: g.from_id,
+    fromUsername: g.from_username,
+    fromName: g.from_name,
+    at: new Date(g.created_at).getTime(),
+  }));
+  db.transaction((state) => {
+    const u = state.users[targetUserId];
+    if (!u) return;
+    if (payload.birth_date) u.birthday = payload.birth_date;
+    u.birthdayVisible = payload.birthday_visible;
+    u.hideGiftSenders = payload.hide_gift_senders;
+    u.giftRecords = gifts;
+    u.giftsReceived = gifts.map((g) => g.listingId);
+    u.giftsReceivedCount = Math.max(u.giftsReceivedCount ?? 0, gifts.length);
+  });
+  return {
+    birthday: payload.birth_date ?? undefined,
+    birthdayVisible: payload.birthday_visible,
+    hideGiftSenders: payload.hide_gift_senders,
+    gifts,
+  };
+}
+
+export async function adminRemoteGrantSparks(targetUserId: string, amount: number): Promise<number> {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc('admin_grant_sparks', { target_user_id: targetUserId, amount });
+  if (error || typeof data !== 'number') throw new AppError('err.notMember');
+  return data;
 }
 
 export async function updateRemoteBlock(userId: string, otherId: string, blocked: boolean): Promise<void> {

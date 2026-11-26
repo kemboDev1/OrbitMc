@@ -11,6 +11,16 @@ export interface AuraSub {
   renews: number;
 }
 
+export interface GiftRecord {
+  listingId: ID;
+  listingName?: string;
+  listingKind?: ListingKind;
+  fromId?: ID | null;
+  fromUsername?: string | null;
+  fromName?: string | null;
+  at: number;
+}
+
 export interface User {
   id: ID;
   username: string;
@@ -24,6 +34,10 @@ export interface User {
   profileTemplate?: 'clean' | 'halo' | 'frame';
   chatFont?: 'sans' | 'display' | 'mono' | 'serif';
   messageEffect?: 'none' | 'glow' | 'aurora' | 'ember';
+  birthday?: string;
+  birthdayVisible?: boolean;
+  hideGiftSenders?: boolean;
+  giftRecords?: GiftRecord[];
   presence: Presence;
   statusText: string;
   createdAt: number;
@@ -101,7 +115,7 @@ export interface Message {
   poll?: PollData;
 }
 
-export type ListingKind = 'stickers' | 'theme' | 'frame';
+export type ListingKind = 'stickers' | 'theme' | 'frame' | 'bundle';
 
 export interface ThemeData {
   dark: boolean;
