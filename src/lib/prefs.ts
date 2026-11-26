@@ -11,9 +11,19 @@ export interface Prefs {
   desktop: boolean;
   calm: boolean;
   members: boolean;
+  enterToSend: boolean;
 }
 
-const defaults: Prefs = { layout: 'auto', density: 'cozy', sound: true, desktop: false, calm: false, members: true };
+const defaults: Prefs = {
+  layout: 'auto',
+  density: 'cozy',
+  sound: true,
+  desktop: false,
+  calm: false,
+  members: true,
+  enterToSend: true,
+};
+
 const stored = createStore<Partial<Prefs>>({}, 'sado:prefs', (v) => typeof v === 'object' && v !== null);
 
 export const prefs = {
@@ -29,7 +39,7 @@ function apply() {
   if (typeof document === 'undefined') return;
   const theme = resolveTheme(themeMode.get());
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0c0d10' : '#f4f1ea');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0b0c12' : '#f4f1ea');
   document.documentElement.classList.toggle('calm', prefs.get().calm);
 }
 

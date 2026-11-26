@@ -5,6 +5,7 @@ import { AppError } from './errors';
 import { validateBio, validateName } from './auth';
 import type { Presence } from './types';
 import { updateRemoteProfile } from './cloud';
+import { saveCosmetics } from './cosmetics';
 
 export async function updateProfile(userId: string, input: { name: string; bio: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; profileTags?: string[]; profileTemplate?: 'clean' | 'halo' | 'frame' }): Promise<void> {
   const name = validateName(input.name);
@@ -44,6 +45,7 @@ export function updateAccent(userId: string, accent: string | null): void {
     const user = d.users[userId];
     if (!user || user.bot) throw new AppError('err.notMember');
     user.accent = accent;
+    saveCosmetics(userId, { accent });
   });
 }
 

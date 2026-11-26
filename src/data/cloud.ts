@@ -2,7 +2,8 @@ import { db } from './db';
 import type { FrameData, Hub, Message, Presence, Role, Room, ThemeData, User } from './types';
 import { requireSupabase } from '../lib/supabase';
 import { AppError } from './errors';
-import { replaceRemoteBlocks, restoreChatForUser, setRemoteBlocked } from './chatControls';
+import { replaceRemoteBlocks, setRemoteBlocked } from './chatControls';
+import { getCosmetics } from './cosmetics';
 import type { Listing, ListingKind } from './types';
 
 interface ProfileRow {
@@ -55,7 +56,7 @@ function blockTableMissing(error: { code?: string } | null): boolean {
 
 type MarketRow = {
   id: string; seller_id: string | null; seller_name: string; kind: ListingKind; name: string; about: string;
-  price: number; design: Record<string, unknown>; sales: number; active: boolean; created_at: string;
+  price: number; design: Record<string, unknown>; sales: number; active: boolean; featured?: boolean; created_at: string;
 };
 
 type MarketSnapshot = {
@@ -67,29 +68,22 @@ type MarketSnapshot = {
 
 function mapMarketListing(row: MarketRow, previous?: Listing): Listing {
   const design = row.design ?? {};
-  const bundleTheme = row.kind === 'bundle' ? (design.theme as Record<string, unknown> | undefined) : undefined;
-  const bundleFrame = row.kind === 'bundle' ? (design.frame as Record<string, unknown> | undefined) : undefined;
-  const theme = (row.kind === 'bundle' ? bundleTheme : row.kind === 'theme' ? design : undefined) as unknown as ThemeData | undefined;
-  const imagePath = typeof theme?.image === 'string' ? theme.image : typeof design.imagePath === 'string' ? design.imagePath : undefined;
-  const image = imagePath?.startsWith('data:image/') ? imagePath : imagePath ? requireSupabase().storage.from('market-assets').getPublicUrl(imagePath).data.publicUrl : undefined;
   return {
     ...previous,
     id: row.id,
     kind: row.kind,
     name: row.name,
-    nameRu: typeof design.nameRu === 'string' ? design.nameRu : previous?.nameRu,
-    nameUz: typeof design.nameUz === 'string' ? design.nameUz : previous?.nameUz,
     about: row.about,
-    aboutRu: typeof design.aboutRu === 'string' ? design.aboutRu : previous?.aboutRu,
-    aboutUz: typeof design.aboutUz === 'string' ? design.aboutUz : previous?.aboutUz,
     price: row.price,
     sellerId: row.seller_id ?? 'orbit-studio',
     sales: row.sales,
     createdAt: new Date(row.created_at).getTime(),
     auraOnly: design.auraOnly === true,
+    featured: row.featured === true || previous?.featured === true,
     removed: !row.active,
-    theme: theme ? { ...theme, image } : undefined,
-    frame: row.kind === 'frame' ? design as unknown as FrameData : bundleFrame as unknown as FrameData | undefined,
+    stickers: row.kind === 'stickers' && Array.isArray(design.stickers) ? design.stickers as string[] : previous?.stickers,
+    theme: row.kind === 'theme' ? design as unknown as ThemeData : undefined,
+    frame: row.kind === 'frame' ? design as unknown as FrameData : undefined,
     remote: true,
   };
 }
@@ -130,17 +124,8 @@ export async function syncRemoteMarket(userId: string): Promise<void> {
 
 export async function createRemoteListing(input: { userId: string; kind: ListingKind; name: string; about: string; price: number; design: Record<string, unknown> }): Promise<Listing> {
   const client = requireSupabase();
-  const design = structuredClone(input.design);
-  const theme = (input.kind === 'bundle' ? design.theme : design) as Record<string, unknown> | undefined;
-  if (typeof theme?.image === 'string' && theme.image.startsWith('data:image/jpeg;base64,')) {
-    const imagePath = `${input.userId}/${crypto.randomUUID()}.jpg`;
-    const bytes = Uint8Array.from(atob(theme.image.slice('data:image/jpeg;base64,'.length)), (char) => char.charCodeAt(0));
-    const { error: uploadError } = await client.storage.from('market-assets').upload(imagePath, bytes, { contentType: 'image/jpeg', upsert: false, cacheControl: '31536000' });
-    if (uploadError) throw new AppError('shopUnavailable');
-    theme.image = imagePath;
-  }
   const { data, error } = await client.rpc('create_market_listing', {
-    item_kind: input.kind, item_name: input.name, item_about: input.about, item_price: input.price, item_design: design,
+    item_kind: input.kind, item_name: input.name, item_about: input.about, item_price: input.price, item_design: input.design,
   });
   if (error || typeof data !== 'string') throw mapMarketError(error);
   await syncRemoteMarket(input.userId);
@@ -172,6 +157,7 @@ export async function removeRemoteListing(userId: string, listingId: string): Pr
 }
 
 function toUser(row: ProfileRow, previous?: User): User {
+  const saved = getCosmetics(row.id);
   return {
     ...previous,
     id: row.id,
@@ -180,23 +166,24 @@ function toUser(row: ProfileRow, previous?: User): User {
     bio: row.bio,
     hue: row.hue,
     avatar: row.avatar ?? undefined,
-    banner: row.banner ?? undefined,
-    profileStroke: row.profile_stroke ?? undefined,
-    profileTags: Array.isArray(row.profile_tags) ? row.profile_tags.slice(0, 5) : [],
-    profileTemplate: row.profile_template ?? 'clean',
+    banner: row.banner ?? previous?.banner,
+    profileStroke: row.profile_stroke ?? previous?.profileStroke,
+    profileTags: row.profile_tags ?? previous?.profileTags,
+    profileTemplate: row.profile_template ?? previous?.profileTemplate,
     presence: row.presence,
     statusText: row.status_text,
     createdAt: new Date(row.created_at).getTime(),
     serverBacked: true,
     bot: undefined,
     auth: undefined,
-    aura: previous?.aura ?? null,
+    isAdmin: previous?.isAdmin ?? saved?.isAdmin,
+    aura: previous?.aura ?? saved?.aura ?? null,
     sparks: previous?.sparks ?? 300,
     inventory: previous?.inventory ?? [],
-    frame: previous?.frame ?? null,
-    theme: previous?.theme ?? null,
-    stickerPack: previous?.stickerPack ?? null,
-    accent: previous?.accent ?? null,
+    frame: previous?.frame ?? saved?.frame ?? null,
+    theme: previous?.theme ?? saved?.theme ?? null,
+    stickerPack: previous?.stickerPack ?? saved?.stickerPack ?? null,
+    accent: previous?.accent ?? saved?.accent ?? null,
     ring: previous?.ring ?? false,
     lastDaily: previous?.lastDaily ?? 0,
     lastStipend: previous?.lastStipend ?? 0,
@@ -233,7 +220,6 @@ function cacheRemoteDirectMessage(row: DirectMessageRow): void {
       if (!state.dms[participant].includes(message.ch)) state.dms[participant].unshift(message.ch);
     }
   });
-  for (const participant of [row.sender_id, row.recipient_id]) restoreChatForUser(participant, message.ch);
 }
 
 function removeCachedDirectMessage(messageId: string): void {
@@ -351,38 +337,56 @@ export async function addRemoteHubRoom(userId: string, hubId: string, name: stri
   return data;
 }
 
-export async function updateRemoteHubDetails(userId: string, hubId: string, details: { name: string; about: string; emoji: string; hue: number; isPublic: boolean }): Promise<void> {
+export async function removeRemoteHubRoom(userId: string, hubId: string, roomId: string): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.rpc('update_hub_details', { target_hub_id: hubId, next_name: details.name, next_about: details.about, next_emoji: details.emoji, next_hue: details.hue, next_public: details.isPublic });
+  const { error } = await client.rpc('remove_hub_room', { target_hub_id: hubId, target_room_id: roomId });
   if (error) throw mapHubError(error, 'err.notMember');
   await syncRemoteHubs(userId);
 }
 
-export async function updateRemoteHubRoom(userId: string, hubId: string, roomId: string, details: { topic: string; kind: 'text' | 'broadcast' }): Promise<void> {
+export async function updateRemoteHubDetails(userId: string, hubId: string, input: { name: string; about: string; emoji: string; hue: number; isPublic: boolean }): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.rpc('update_hub_room_settings', { target_hub_id: hubId, target_room_id: roomId, next_topic: details.topic, next_kind: details.kind });
+  const { error } = await client.rpc('update_hub_details', {
+    target_hub_id: hubId,
+    next_name: input.name,
+    next_about: input.about,
+    next_emoji: input.emoji,
+    next_hue: input.hue,
+    next_public: input.isPublic,
+  });
   if (error) throw mapHubError(error, 'err.notMember');
   await syncRemoteHubs(userId);
 }
 
-export async function updateRemoteHubMember(userId: string, hubId: string, targetUserId: string, role: Role): Promise<void> {
-  if (!['member', 'mod'].includes(role)) throw new AppError('err.notMember');
+export async function updateRemoteHubRoomSettings(userId: string, hubId: string, roomId: string, input: { topic: string; kind: 'text' | 'broadcast' }): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.rpc('set_hub_member_role', { target_hub_id: hubId, target_user_id: targetUserId, next_role: role });
+  const { error } = await client.rpc('update_hub_room_settings', {
+    target_hub_id: hubId,
+    target_room_id: roomId,
+    next_topic: input.topic,
+    next_kind: input.kind,
+  });
+  if (error) throw mapHubError(error, 'err.notMember');
+  await syncRemoteHubs(userId);
+}
+
+export async function setRemoteHubMemberRole(userId: string, hubId: string, targetUserId: string, role: 'mod' | 'member'): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc('set_hub_member_role', {
+    target_hub_id: hubId,
+    target_user_id: targetUserId,
+    next_role: role,
+  });
   if (error) throw mapHubError(error, 'err.notMember');
   await syncRemoteHubs(userId);
 }
 
 export async function removeRemoteHubMember(userId: string, hubId: string, targetUserId: string): Promise<void> {
   const client = requireSupabase();
-  const { error } = await client.rpc('remove_hub_member', { target_hub_id: hubId, target_user_id: targetUserId });
-  if (error) throw mapHubError(error, 'err.notMember');
-  await syncRemoteHubs(userId);
-}
-
-export async function removeRemoteHubRoom(userId: string, hubId: string, roomId: string): Promise<void> {
-  const client = requireSupabase();
-  const { error } = await client.rpc('remove_hub_room', { target_hub_id: hubId, target_room_id: roomId });
+  const { error } = await client.rpc('remove_hub_member', {
+    target_hub_id: hubId,
+    target_user_id: targetUserId,
+  });
   if (error) throw mapHubError(error, 'err.notMember');
   await syncRemoteHubs(userId);
 }

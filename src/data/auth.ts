@@ -92,7 +92,105 @@ export async function signIn(input: { email: string; password: string }): Promis
   return { user, isNew: false };
 }
 
+/** Local interactive preview workspace so users can test Chats, Hubs, Shop, Orbit+ and Admin immediately. */
+export function enterDemoWorkspace(): User {
+  const demoId = 'demo_explorer';
+  const friendA = 'demo_friend_ayla';
+  const friendB = 'demo_friend_kamron';
+  const now = Date.now();
+  db.transaction((state) => {
+    if (!state.users[demoId]) {
+      state.users[demoId] = {
+        id: demoId,
+        username: 'orbit_founder',
+        name: 'Orbit Founder',
+        bio: 'Building communities and custom assets inside OrbitMc.',
+        hue: 18,
+        presence: 'online',
+        statusText: 'Designing in OrbitMc ✨',
+        createdAt: now - 86_400_000 * 14,
+        serverBacked: false,
+        isAdmin: true,
+        aura: { tier: 'flare', cycle: 'month', since: now - 86_400_000 * 5, renews: now + 86_400_000 * 25 },
+        sparks: 1450,
+        inventory: ['orbit_theme_nightglass', 'orbit_frame_arc'],
+        giftsReceived: ['orbit_theme_nightglass'],
+        giftsReceivedCount: 1,
+        frame: 'orbit_frame_arc',
+        theme: null,
+        stickerPack: null,
+        accent: null,
+        ring: true,
+        lastDaily: 0,
+        lastStipend: 0,
+      };
+    } else {
+      state.users[demoId].presence = 'online';
+      state.users[demoId].isAdmin = true;
+    }
+    if (!state.users[friendA]) {
+      state.users[friendA] = {
+        id: friendA, username: 'ayla_design', name: 'Ayla Design',
+        bio: 'Theme maker & community host.', hue: 268, presence: 'online',
+        statusText: 'Crafting Nightglass palettes', createdAt: now - 86_400_000 * 40,
+        serverBacked: false, aura: { tier: 'nova', cycle: 'year', since: now - 86_400_000 * 20, renews: now + 86_400_000 * 340 },
+        sparks: 820, inventory: ['orbit_theme_nightglass'], frame: null, theme: null, accent: null, ring: false, lastDaily: 0, lastStipend: 0,
+      };
+    }
+    if (!state.users[friendB]) {
+      state.users[friendB] = {
+        id: friendB, username: 'kamron_dev', name: 'Kamron Dev',
+        bio: 'Shipping hubs, bots & quick tools.', hue: 155, presence: 'idle',
+        statusText: 'In #tasks room', createdAt: now - 86_400_000 * 22,
+        serverBacked: false, aura: null, sparks: 410, inventory: [], frame: null, theme: null, accent: null, ring: false, lastDaily: 0, lastStipend: 0,
+      };
+    }
+    const dmIdA = `dm:${[demoId, friendA].sort().join(':')}`;
+    state.dms[demoId] ??= [];
+    if (!state.dms[demoId].includes(dmIdA)) state.dms[demoId].unshift(dmIdA);
+    if (!state.msgs[dmIdA]?.length) {
+      state.msgs[dmIdA] = [
+        { id: 'demo_m1', ch: dmIdA, by: friendA, text: 'Welcome to **OrbitMc**! Try out `inline code`, ||tap-to-reveal spoilers||, polls, or create your own theme & frame in the Shop ✨', ts: now - 240_000, reactions: { '✨': [demoId] }, pinned: true },
+        { id: 'demo_m2', ch: dmIdA, by: demoId, text: 'Awesome! Also check out our work Hub and the Admin Studio.', ts: now - 120_000, reactions: {} },
+      ];
+    }
+    const hubId = 'h_orbit_builders';
+    if (!state.hubs[hubId]) {
+      state.hubs[hubId] = {
+        id: hubId,
+        name: 'Orbit Builders',
+        about: 'Product design, dev sprints, and community asset drops.',
+        hue: 16,
+        emoji: '🚀',
+        ownerId: demoId,
+        members: { [demoId]: 'owner', [friendA]: 'mod', [friendB]: 'member' },
+        rooms: [
+          { id: `${hubId}_announcements`, name: 'announcements', kind: 'broadcast', topic: 'Official OrbitMc updates & drops' },
+          { id: `${hubId}_general`, name: 'general', kind: 'text', topic: 'Team chat and feedback' },
+          { id: `${hubId}_tasks`, name: 'tasks', kind: 'text', topic: 'Daily tasks and sprint notes' },
+        ],
+        public: true,
+        invite: 'orbit999',
+        createdAt: now - 86_400_000 * 10,
+      };
+      state.msgs[`${hubId}_announcements`] = [
+        { id: 'demo_hm1', ch: `${hubId}_announcements`, by: demoId, text: '🚀 **OrbitMc Remake Live!** Welcome to the new workspace — Telegram speed meets Discord structure.', ts: now - 600_000, reactions: { '🔥': [friendA, friendB] }, pinned: true },
+      ];
+      state.msgs[`${hubId}_general`] = [
+        { id: 'demo_hm2', ch: `${hubId}_general`, by: friendA, text: 'Dropped a new theme in the **Orbit Shop** — check it out and send feedback!', ts: now - 300_000, reactions: { '🫶': [demoId] } },
+      ];
+      state.msgs[`${hubId}_tasks`] = [];
+    }
+  });
+  session.start(demoId, 'demo-local', Math.floor((Date.now() + 7 * 86_400_000) / 1000));
+  return db.get().users[demoId];
+}
+
 export async function restoreSession(): Promise<void> {
+  const existing = session.get();
+  if (existing?.token === 'demo-local' && db.get().users[existing.userId]) {
+    return;
+  }
   const client = requireSupabase();
   const { data, error } = await client.auth.getSession();
   if (error) throw mapAuthError(error);
@@ -109,8 +207,13 @@ export async function restoreSession(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  const current = session.get();
+  if (current?.token === 'demo-local') {
+    session.end();
+    return;
+  }
   const client = requireSupabase();
-  const userId = session.get()?.userId;
+  const userId = current?.userId;
   let presenceUpdateFailed = false;
   if (userId) {
     try {

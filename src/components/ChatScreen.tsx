@@ -1,30 +1,27 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { DB, Hub, Message, User } from '../data/types';
-import { addReaction, canDeleteMessageForEveryone, deleteMessage, editMessage, loadOlderMessages, parseDM, pinMessage, sendMessage, setUserBlocked, startDM, updateRead } from '../data/chat';
-import { addRoom, leaveHub, removeHubMember, setHubMemberRole, updateHubDetails, updateHubRoom } from '../data/hubs';
+import { addReaction, canDeleteMessageForEveryone, canPostInChannel, deleteMessage, editMessage, loadOlderMessages, parseDM, pinMessage, sendMessage, setUserBlocked, startDM, updateRead, votePoll } from '../data/chat';
+import { addRoom, leaveHub } from '../data/hubs';
 import { getAura, hasAura } from '../data/market';
 import { fileToDataUrl } from '../lib/image';
+import { renderRichText } from '../lib/format';
 import { chime, notify } from '../lib/notify';
 import { prefs } from '../lib/prefs';
 import { hueOf, fmtTime, uid, cx } from '../lib/util';
 import { useI18n } from '../i18n';
 import { Avatar, AvatarPile } from './Avatar';
+import { HubSettingsModal } from './HubPages';
 import { Icon } from './Icons';
 import { Modal } from './Modal';
 import { tell, tellUndo } from './Toast';
 import { AppError } from '../data/errors';
-import { LIMITS } from '../config';
-import { clearHistory, deleteChatForUser, getChatTheme, hiddenBefore, hideMessage, isMessageHidden, restoreHistory, setChatTheme, setMuted, useChatControls } from '../data/chatControls';
+import { AURA, LIMITS } from '../config';
+import { clearHistory, hiddenBefore, hideMessage, isMessageHidden, restoreHistory, setMuted, useChatControls } from '../data/chatControls';
 
 const quickEmoji = ['🫶', '😂', '✨', '🤍', '👀', '🔥', '🥹', '🌱', '🎧', '🙌', '😮‍💨', '💀'];
-const chatThemeOptions = ['default', 'ember', 'ocean', 'moss', 'violet'] as const;
 
-function normalizeText(text: string, t: (key: string) => string) {
-  return text.replace(/\n/g, '\n').trim().length === 0 ? t('err.emptyMessage') : '';
-}
-
-export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, onNewHub, onDeleteConversation, birthdayPeople = [] }: {
-  db: DB; user: User; channel: string | null; setChannel: (id: string) => void; onStartChat: () => void; onNewHub: () => void; onDeleteConversation: () => void; birthdayPeople?: string[];
+export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, onOpenList }: {
+  db: DB; user: User; channel: string | null; setChannel: (id: string) => void; onStartChat: () => void; onOpenList?: () => void;
 }) {
   const { t, lang } = useI18n();
   const pref = prefs.use();
@@ -36,7 +33,12 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [moreFor, setMoreFor] = useState<string | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
-  const [hubSettingsOpen, setHubSettingsOpen] = useState(false);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [hubManageOpen, setHubManageOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Message | null>(null);
   const [confirmDeleteEveryone, setConfirmDeleteEveryone] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -45,7 +47,6 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [blockBusy, setBlockBusy] = useState(false);
-  const [hubRoleBusy, setHubRoleBusy] = useState<string | null>(null);
   const [conversationMenuOpen, setConversationMenuOpen] = useState(false);
   const [newRoomOpen, setNewRoomOpen] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
@@ -74,22 +75,34 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const remoteHub = !!activeHub?.remote;
   const remoteHistory = remoteDM || remoteHub;
   const channelTitle = dm ? (otherId === user.id ? t('saved') : other.name) : activeRoom?.name ?? t('chat');
-  const subtitle = dm ? (otherId === user.id ? t('savedDM') : other.statusText || (other.presence === 'online' ? t('onlineNow') : t(other.presence))) : activeHub?.name;
+  const subtitle = dm ? (otherId === user.id ? t('savedDM') : other.statusText || (other.presence === 'online' ? t('onlineNow') : t(other.presence))) : `${activeHub?.name ?? ''}${activeRoom?.topic ? ` · ${activeRoom.topic}` : ''}`;
   const activeAura = getAura(user);
-  const maxChars = activeAura?.tier === 'nova' ? LIMITS.messageNova : LIMITS.message;
+  const maxChars = activeAura ? AURA[activeAura.tier].maxChars : LIMITS.message;
   const directLayout = dm && dm[0] !== dm[1];
   const people = useMemo(() => activeHub ? Object.keys(activeHub.members).map((id) => data.users[id]).filter(Boolean) : [], [activeHub, data.users]);
   const messageLayout = pref.layout === 'auto' ? (directLayout ? 'bubbles' : 'stream') : pref.layout;
   const pinned = messages.filter((m) => m.pinned);
   const blockedConversation = !!dm && otherId !== user.id && chatControls.blocked.includes(otherId);
   const mutedConversation = !!dm && otherId !== user.id && chatControls.muted.includes(otherId);
+  const canPost = channel ? canPostInChannel(channel, user.id) : false;
+  const isBroadcastLocked = !!activeRoom && activeRoom.kind === 'broadcast' && !canPost;
+  const isSuspended = !!user.suspended;
+  const canManageHub = !!activeHub && ['owner', 'mod'].includes(activeHub.members[user.id] ?? '');
 
   useEffect(() => { setMembersOpen(Boolean(activeHub && pref.members)); }, [channel, activeHub?.id, pref.members]);
 
   useEffect(() => {
-    setComposer(''); setReply(undefined); setEditId(null); setEmojiOpen(false); setMoreFor(null);
+    setComposer(''); setReply(undefined); setEditId(null); setEmojiOpen(false); setMoreFor(null); setConversationMenuOpen(false);
     if (channel) updateRead(user.id, channel);
   }, [channel, user.id]);
+
+  // Auto-resize composer textarea cleanly
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(132, Math.max(24, el.scrollHeight))}px`;
+  }, [composer]);
 
   useLayoutEffect(() => {
     if (!channel || !scrollRef.current || editId) return;
@@ -158,7 +171,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault();
-    if (!channel || imageBusy || blockedConversation) return;
+    if (!channel || imageBusy || blockedConversation || !canPost) return;
     try {
       const text = composer.replace(/\r\n?/g, '\n').trim();
       if (!text) throw new AppError('err.emptyMessage');
@@ -166,17 +179,32 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       setComposer(''); setReply(undefined); setEmojiOpen(false);
       textareaRef.current?.focus();
       if (pref.sound) chime();
-    } catch (e) { report(e); }
+    } catch (err) { report(err); }
   };
 
   const keySend = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void submit(); }
+    if (pref.enterToSend && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void submit(); }
+    if (!pref.enterToSend && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) { e.preventDefault(); void submit(); }
+  };
+
+  const wrapSelection = (before: string, after: string) => {
+    const el = textareaRef.current;
+    if (!el) { setComposer((v) => `${v}${before}${after}`); return; }
+    const start = el.selectionStart ?? composer.length;
+    const end = el.selectionEnd ?? composer.length;
+    const selected = composer.slice(start, end) || 'text';
+    const next = composer.slice(0, start) + before + selected + after + composer.slice(end);
+    setComposer(next);
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(start + before.length, start + before.length + selected.length);
+    }, 0);
   };
 
   const attachPicture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file || !channel || blockedConversation) return;
+    if (!file || !channel || blockedConversation || !canPost) return;
     setImageBusy(true);
     try {
       const aura = getAura(user);
@@ -184,15 +212,38 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       const image = await fileToDataUrl(file, aura ? 1280 : 720, max, true);
       await sendMessage({ channel, userId: user.id, text: composer.trim(), image, reply });
       setComposer(''); setReply(undefined);
-    } catch (e) { report(e); }
+    } catch (err) { report(err); }
     finally { setImageBusy(false); }
   };
 
+  const submitPoll = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!channel || !canPost) return;
+    const q = pollQuestion.trim();
+    const opts = pollOptions.map((o) => o.trim()).filter(Boolean);
+    if (!q || opts.length < 2) return;
+    try {
+      await sendMessage({
+        channel,
+        userId: user.id,
+        text: '',
+        poll: {
+          question: q.slice(0, 160),
+          options: opts.slice(0, 6).map((text, idx) => ({ id: `opt_${idx}_${uid(4)}`, text: text.slice(0, 80), votes: [] })),
+        },
+      });
+      setPollOpen(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      if (pref.sound) chime();
+    } catch (err) { report(err); }
+  };
+
   const editStart = (msg: Message) => { setEditId(msg.id); setEditText(msg.text); setMoreFor(null); setTimeout(() => editRef.current?.focus(), 0); };
-  const editSave = async (msg: Message) => { try { await editMessage(msg.ch, msg.id, user.id, editText); setEditId(null); } catch (e) { report(e); } };
-  const onReaction = async (msg: Message, emoji: string) => { try { await addReaction(msg.ch, msg.id, user.id, emoji); } catch (e) { report(e); } };
-  const onPin = async (msg: Message) => { try { await pinMessage(msg.ch, msg.id, user.id); setMoreFor(null); } catch (e) { report(e); } };
-  const onDelete = async () => { if (!confirmDelete) return; try { if (confirmDeleteEveryone && canDeleteMessageForEveryone(confirmDelete.ch, confirmDelete, user.id)) await deleteMessage(confirmDelete.ch, confirmDelete.id, user.id); else hideMessage(user.id, confirmDelete.ch, confirmDelete.id); } catch (e) { report(e); } finally { setConfirmDelete(null); setConfirmDeleteEveryone(false); } };
+  const editSave = async (msg: Message) => { try { await editMessage(msg.ch, msg.id, user.id, editText); setEditId(null); } catch (err) { report(err); } };
+  const onReaction = async (msg: Message, emoji: string) => { try { await addReaction(msg.ch, msg.id, user.id, emoji); } catch (err) { report(err); } };
+  const onPin = async (msg: Message) => { try { await pinMessage(msg.ch, msg.id, user.id); setMoreFor(null); } catch (err) { report(err); } };
+  const onDelete = async () => { if (!confirmDelete) return; try { if (confirmDeleteEveryone && canDeleteMessageForEveryone(confirmDelete.ch, confirmDelete, user.id)) await deleteMessage(confirmDelete.ch, confirmDelete.id, user.id); else hideMessage(user.id, confirmDelete.ch, confirmDelete.id); } catch (err) { report(err); } finally { setConfirmDelete(null); setConfirmDeleteEveryone(false); } };
   const quote = (msg: Message) => { setReply(msg.id); setMoreFor(null); textareaRef.current?.focus(); };
   const jumpTo = (id: string) => { document.getElementById(`msg-${id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); };
 
@@ -205,21 +256,10 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   };
 
   const toggleMute = () => {
-    setMuted(user.id, otherId, !mutedConversation);
+    const nextMuted = !mutedConversation;
+    setMuted(user.id, otherId, nextMuted);
     setConversationMenuOpen(false);
-    tell(t(mutedConversation ? 'chatUnmuted' : 'chatMuted'), 'good');
-  };
-
-  const muteFor = (durationMs?: number) => {
-    setMuted(user.id, otherId, true, durationMs);
-    setConversationMenuOpen(false);
-    tell(t(durationMs ? 'chatMutedUntil' : 'chatMuted'), 'good');
-  };
-
-  const chooseChatTheme = (theme: typeof chatThemeOptions[number]) => {
-    if (!channel) return;
-    setChatTheme(user.id, channel, theme);
-    tell(t('chatThemeSaved'), 'good');
+    tell(t(nextMuted ? 'chatMuted' : 'chatUnmuted'), 'good');
   };
 
   const confirmBlockChange = async () => {
@@ -233,35 +273,8 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   };
 
   const confirmLeaveHub = async () => {
-    try { await leaveHub(activeHub!.id, user.id); setLeaveOpen(false); onStartChat(); tell(t('hubLeft'), 'good'); }
+    try { await leaveHub(activeHub!.id, user.id); setLeaveOpen(false); (onOpenList ?? onStartChat)(); tell(t('hubLeft'), 'good'); }
     catch (error) { tell(error instanceof AppError && error.key === 'owner' ? t('ownerLeave') : error instanceof AppError ? t(error.key) : t('err.generic'), 'bad'); setLeaveOpen(false); }
-  };
-
-  const changeHubMemberRole = async (targetId: string) => {
-    if (!activeHub || activeHub.ownerId !== user.id || hubRoleBusy) return;
-    const next = activeHub.members[targetId] === 'mod' ? 'member' : 'mod';
-    setHubRoleBusy(targetId);
-    try { await setHubMemberRole(activeHub.id, user.id, targetId, next); tell(t(next === 'mod' ? 'memberPromoted' : 'memberDemoted'), 'good'); }
-    catch (error) { report(error); }
-    finally { setHubRoleBusy(null); }
-  };
-
-  const kickHubMember = async (targetId: string) => {
-    if (!activeHub || activeHub.ownerId !== user.id || hubRoleBusy) return;
-    setHubRoleBusy(targetId);
-    try { await removeHubMember(activeHub.id, user.id, targetId); tell(t('memberRemoved'), 'good'); }
-    catch (error) { report(error); }
-    finally { setHubRoleBusy(null); }
-  };
-
-  const saveHubRoomSettings = async (roomId: string, details: { topic: string; kind: 'text' | 'broadcast' }) => {
-    if (!activeHub) return;
-    try { await updateHubRoom(activeHub.id, user.id, roomId, details); tell(t('settingsSaved'), 'good'); } catch (error) { report(error); }
-  };
-
-  const saveHubSettings = async (details: { name: string; about: string; emoji: string; hue: number; isPublic: boolean }) => {
-    if (!activeHub) return;
-    try { await updateHubDetails(activeHub.id, user.id, details); setHubSettingsOpen(false); tell(t('settingsSaved'), 'good'); } catch (error) { report(error); }
   };
 
   const createRoom = async (event: FormEvent) => {
@@ -270,98 +283,174 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
     catch (error) { report(error); }
   };
 
-  if (!channel) return <div className="empty-conversation"><div className="empty-art"><span/><span/><span/><Icon name="chat" size={27}/></div><h2>{t('quiet')}</h2><p>{t('quietSub')}</p><button className="btn btn-primary" onClick={onStartChat}><Icon name="plus" size={16}/>{t('startDM')}</button></div>;
+  const replyTargetMsg = reply ? messages.find((m) => m.id === reply) : undefined;
+  const ownedStickerPacks = useMemo(() => Object.values(data.listings).filter((l) => !l.removed && l.kind === 'stickers' && (user.inventory.includes(l.id) || l.sellerId === user.id) && l.stickers?.length), [data.listings, user.inventory, user.id]);
 
-  return <div className="chat-layout" data-chat-theme={dm ? getChatTheme(user.id, channel) : 'default'}>
+  if (!channel) return <div className="empty-conversation"><div className="empty-art"><span /><span /><span /><Icon name="chat" size={27} /></div><h2>{t('quiet')}</h2><p>{t('quietSub')}</p><div className="empty-actions">{onOpenList && <button className="btn btn-outline mobile-only-btn" onClick={onOpenList}><Icon name="menu" size={16} />{t('backToChats')}</button>}<button className="btn btn-primary" onClick={onStartChat}><Icon name="plus" size={16} />{t('startDM')}</button></div></div>;
+
+  return <div className="chat-layout">
     {activeHub && <div className="channel-rail">
-      <div className="channel-hub-heading"><span className="hub-mark" style={{ '--hub-hue': activeHub.hue } as React.CSSProperties}>{activeHub.emoji}</span><div><strong>{activeHub.name}</strong><small>{people.length} {t('members').toLowerCase()}</small></div>{activeHub.ownerId === user.id && <button className="icon-btn" aria-label={t('hubSettingsTitle')} title={t('hubSettingsTitle')} onClick={() => setHubSettingsOpen(true)}><Icon name="gear" size={15}/></button>}<button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={async () => { const url = `${window.location.origin}/invite/${activeHub.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={15}/></button><button className="icon-btn" aria-label={t('members')} title={t('members')} onClick={() => setMembersOpen((v) => !v)}><Icon name="people" size={15}/></button></div>
-      <div className="channel-label">{t('rooms')}<button className="tiny-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)} disabled={!['owner','mod'].includes(activeHub.members[user.id])}><Icon name="plus" size={14}/></button></div>
-      <div className="channel-links">{activeHub.rooms.map((room) => <button key={room.id} className={`channel-link ${channel === room.id ? 'active' : ''}`} onClick={() => setChannel(room.id)}><span className="hash">#</span><span>{room.name}</span></button>)}</div>
-      <div className="channel-footer"><div className="online-pip"/><span>{people.filter((p) => p.presence === 'online').length} {t('onlineNow')}</span><button className="icon-btn leave-room" title={t('leaveHub')} aria-label={t('leaveHub')} onClick={() => setLeaveOpen(true)}><Icon name="back" size={15}/></button></div>
+      <div className="channel-hub-heading">
+        <span className="hub-mark" style={{ '--hub-hue': activeHub.hue } as React.CSSProperties}>{activeHub.emoji}</span>
+        <div><strong>{activeHub.name}</strong><small>{people.length} {t('members').toLowerCase()}</small></div>
+        {canManageHub && <button className="icon-btn" aria-label={t('hubSettings')} title={t('hubSettings')} onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={15} /></button>}
+        <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={async () => { const url = `${window.location.origin}/invite/${activeHub.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={15} /></button>
+      </div>
+      <div className="channel-label">{t('rooms')}<button className="tiny-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)} disabled={!canManageHub}><Icon name="plus" size={14} /></button></div>
+      <div className="channel-links">{activeHub.rooms.map((room) => <button key={room.id} className={`channel-link ${channel === room.id ? 'active' : ''}`} onClick={() => setChannel(room.id)}><span className="hash">{room.kind === 'broadcast' ? <Icon name="megaphone" size={13} /> : '#'}</span><span>{room.name}</span></button>)}</div>
+      <div className="channel-footer"><div className="online-pip" /><span>{people.filter((p) => p.presence === 'online').length} {t('onlineNow')}</span><button className="icon-btn leave-room" title={t('leaveHub')} aria-label={t('leaveHub')} onClick={() => setLeaveOpen(true)}><Icon name="back" size={15} /></button></div>
     </div>}
 
     <section className="conversation">
       <header className="conversation-header">
-        <button className="conversation-back" onClick={onStartChat} aria-label={t('backToApp')}><Icon name="back" size={17}/></button>
+        <button className="conversation-back" onClick={onOpenList ?? onStartChat} aria-label={t('backToChats')} title={t('backToChats')}><Icon name="back" size={17} /></button>
         <button className="conversation-person" onClick={() => setMembersOpen((v) => !v)}>
-          {dm ? <Avatar user={other} size="sm" showStatus /> : <span className="hash-head">#</span>}
+          {dm ? <Avatar user={other} size="sm" showStatus /> : <span className="hash-head">{activeRoom?.kind === 'broadcast' ? <Icon name="megaphone" size={16} /> : '#'}</span>}
           <span className="conversation-title"><strong>{channelTitle}</strong><small>{subtitle}</small></span>
         </button>
-        <div className="conversation-tools">{activeHub && <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={async () => { const url = `${window.location.origin}/invite/${activeHub.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={15}/></button>}{activeHub && <span className="header-people"><AvatarPile people={people.filter((p) => p.presence === 'online')} limit={3}/></span>}<button className={`icon-btn ${membersOpen ? 'active' : ''}`} aria-label={t('members')} title={t('members')} onClick={() => setMembersOpen((v) => !v)}><Icon name="people" size={18}/></button><button className="icon-btn" aria-label={t('openSearch')} title={t('openSearch')} onClick={() => window.dispatchEvent(new CustomEvent('sado:search', { detail: { channel } }))}><Icon name="search" size={18}/></button>{dm && otherId !== user.id && <div className="conversation-menu-wrap"><button className={`icon-btn ${conversationMenuOpen ? 'active' : ''}`} aria-label={t('conversationOptions')} title={t('conversationOptions')} aria-expanded={conversationMenuOpen} onClick={() => setConversationMenuOpen((open) => !open)}><Icon name="moreVertical" size={17}/></button>{conversationMenuOpen && <div className="conversation-menu" onClick={(event) => event.stopPropagation()}><b className="conversation-menu-label">{t('chatTheme')}</b><div className="chat-theme-choices">{chatThemeOptions.map((theme) => <button type="button" key={theme} className={`chat-theme-choice theme-swatch-${theme} ${getChatTheme(user.id, channel!) === theme ? 'selected' : ''}`} aria-label={t(`chatTheme_${theme}`)} title={t(`chatTheme_${theme}`)} onClick={() => chooseChatTheme(theme)}><span/></button>)}</div><span className="conversation-menu-note">{t('chatThemeLocalOnly')}</span><span className="menu-divider"/><b className="conversation-menu-label">{t('muteFor')}</b>{mutedConversation && <button onClick={() => toggleMute()}><Icon name="bell" size={15}/>{t('unmuteChat')}</button>}<button onClick={() => muteFor(60 * 60 * 1000)}><Icon name="moon" size={15}/>{t('muteOneHour')}</button><button onClick={() => muteFor(8 * 60 * 60 * 1000)}><Icon name="moon" size={15}/>{t('muteEightHours')}</button><button onClick={() => muteFor(24 * 60 * 60 * 1000)}><Icon name="moon" size={15}/>{t('muteOneDay')}</button><button onClick={() => muteFor()}><Icon name="moon" size={15}/>{t('muteForever')}</button><button onClick={() => { setConversationMenuOpen(false); setConfirmClear(true); }}><Icon name="trash" size={15}/>{t('clearHistory')}</button><button className="danger-action" onClick={() => { deleteChatForUser(user.id, channel!); setConversationMenuOpen(false); onDeleteConversation(); }}><Icon name="trash" size={15}/>{t('deleteChat')}</button><span className="conversation-menu-note">{t('chatControlsLocalOnly')}</span><span className="menu-divider"/><button className="danger-action" onClick={() => { setConversationMenuOpen(false); setConfirmBlock(true); }}><Icon name={blockedConversation ? 'check' : 'lock'} size={15}/>{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button></div>}</div>}</div>
+        <div className="conversation-tools">
+          {activeHub && canManageHub && <button className="icon-btn mobile-hub-manage" aria-label={t('hubSettings')} title={t('hubSettings')} onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={16} /></button>}
+          {activeHub && <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={async () => { const url = `${window.location.origin}/invite/${activeHub.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={15} /></button>}
+          {activeHub && <span className="header-people"><AvatarPile people={people.filter((p) => p.presence === 'online')} limit={3} /></span>}
+          {pinned.length > 0 && <button className={`icon-btn ${pinnedOpen ? 'active' : ''}`} aria-label={t('pinnedMessages')} title={t('pinnedMessages')} onClick={() => setPinnedOpen(true)}><Icon name="pin" size={16} /></button>}
+          <button className={`icon-btn ${membersOpen ? 'active' : ''}`} aria-label={t('members')} title={t('members')} onClick={() => setMembersOpen((v) => !v)}><Icon name="people" size={18} /></button>
+          <button className="icon-btn" aria-label={t('openSearch')} title={t('openSearch')} onClick={() => window.dispatchEvent(new CustomEvent('sado:search', { detail: { channel } }))}><Icon name="search" size={18} /></button>
+          {dm && otherId !== user.id && <div className="conversation-menu-wrap"><button className={`icon-btn ${conversationMenuOpen ? 'active' : ''}`} aria-label={t('conversationOptions')} title={t('conversationOptions')} aria-expanded={conversationMenuOpen} onClick={() => setConversationMenuOpen((open) => !open)}><Icon name="moreVertical" size={17} /></button>{conversationMenuOpen && <div className="conversation-menu" onClick={(event) => event.stopPropagation()}><button onClick={toggleMute}><Icon name={mutedConversation ? 'bell' : 'moon'} size={15} />{t(mutedConversation ? 'unmuteChat' : 'muteChat')}</button><button onClick={() => { setConversationMenuOpen(false); setConfirmClear(true); }}><Icon name="trash" size={15} />{t('clearHistory')}</button><span className="conversation-menu-note">{t('chatControlsLocalOnly')}</span><span className="menu-divider" /><button className="danger-action" onClick={() => { setConversationMenuOpen(false); setConfirmBlock(true); }}><Icon name={blockedConversation ? 'check' : 'lock'} size={15} />{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button></div>}</div>}
+        </div>
       </header>
-      {activeHub && <div className="mobile-room-strip">{activeHub.rooms.map((room) => <button key={room.id} className={channel === room.id ? 'active' : ''} onClick={() => setChannel(room.id)}><span>#</span>{room.name}</button>)}{['owner','mod'].includes(activeHub.members[user.id]) && <button className="mobile-room-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)}><Icon name="plus" size={14}/></button>}</div>}
+      {activeHub && <div className="mobile-room-strip">{activeHub.rooms.map((room) => <button key={room.id} className={channel === room.id ? 'active' : ''} onClick={() => setChannel(room.id)}><span>{room.kind === 'broadcast' ? '📢' : '#'}</span>{room.name}</button>)}{canManageHub && <button className="mobile-room-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)}><Icon name="plus" size={14} /></button>}</div>}
 
-      {pinned.length > 0 && <button className="pinned-banner" onClick={() => jumpTo(pinned[pinned.length - 1].id)}><Icon name="pin" size={14}/><span><b>{t('pinnedSection')}</b><em>{pinned[pinned.length - 1].text || pinned[pinned.length - 1].sticker}</em></span><Icon name="chevron" size={14}/></button>}
+      {pinned.length > 0 && <button className="pinned-banner" onClick={() => setPinnedOpen(true)}><Icon name="pin" size={14} /><span><b>{t('pinnedSection')} ({pinned.length})</b><em>{pinned[pinned.length - 1].text || pinned[pinned.length - 1].sticker || (pinned[pinned.length - 1].poll?.question ?? '📷')}</em></span><Icon name="chevron" size={14} /></button>}
 
       <div className={`message-scroll ${pref.density === 'compact' ? 'compact' : ''} ${messageLayout === 'stream' ? 'stream-layout' : 'bubbles-layout'}`} ref={scrollRef} onScroll={recordScrollPosition} onClick={() => setMoreFor(null)}>
-      {remoteHistory && !clearMark && hasOlderHistory && messages.length > 0 && <button className="load-older-messages" onClick={() => void loadOlderHistory()} disabled={loadingOlderHistory}>{t(loadingOlderHistory ? 'loadingOlder' : 'loadOlder')}</button>}
+        {remoteHistory && !clearMark && hasOlderHistory && messages.length > 0 && <button className="load-older-messages" onClick={() => void loadOlderHistory()} disabled={loadingOlderHistory}>{t(loadingOlderHistory ? 'loadingOlder' : 'loadOlder')}</button>}
         <div className="conversation-intro">
           {dm && <button type="button" className="intro-avatar" aria-label={t('profile')} title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: other.id }))}><Avatar user={other} size="xl" showStatus /></button>}
           {!dm && <div className="intro-hub-mark" style={{ '--hub-hue': activeHub?.hue ?? 30 } as React.CSSProperties}>{activeHub?.emoji ?? '✳'}</div>}
           <h2>{dm ? (otherId === user.id ? t('saved') : other.name) : `${activeHub?.emoji ?? ''} ${activeHub?.name ?? ''}`}</h2>
-          <p>{dm ? (other.bio || (otherId === user.id ? t('savedDM') : t('welcomeSub'))) : (activeHub?.about || activeRoom?.topic || t('quietSub'))}</p>
+          <p>{dm ? (other.bio || (otherId === user.id ? t('savedDM') : t('welcomeSub'))) : (activeRoom?.topic || activeHub?.about || t('quietSub'))}</p>
           {dm && <span className="member-since">@{other.username} · {other.presence === 'online' ? t('online') : t(other.presence)}</span>}
-          {!dm && activeHub && <span className="member-since">{people.length} {t('members').toLowerCase()} · {activeRoom?.topic || activeHub.name}</span>}
+          {!dm && activeHub && <span className="member-since">{people.length} {t('members').toLowerCase()} · #{activeRoom?.name}</span>}
         </div>
 
-        {blockedConversation ? <div className="conversation-blocked-note"><Icon name="lock" size={18}/><b>{t('blockedConversation')}</b><span>{t('blockedConversationSub')}</span></div> : messages.length > 0 ? <div className="date-divider"><span>{t('today')}</span></div> : <div className="first-message-note">{allMessages.length > 0 && clearMark ? t('historyCleared') : t('noMessages')}</div>}
+        {blockedConversation ? <div className="conversation-blocked-note"><Icon name="lock" size={18} /><b>{t('blockedConversation')}</b><span>{t('blockedConversationSub')}</span></div> : messages.length > 0 ? <div className="date-divider"><span>{t('today')}</span></div> : <div className="first-message-note">{allMessages.length > 0 && clearMark ? t('historyCleared') : t('noMessages')}</div>}
         {!blockedConversation && messages.map((msg, index) => {
           const person = data.users[msg.by] ?? user;
           const previous = messages[index - 1];
           const grouped = previous && previous.by === msg.by && msg.ts - previous.ts < 5 * 60_000;
           const isMine = msg.by === user.id;
           const replyMessage = msg.reply ? messages.find((m) => m.id === msg.reply) : undefined;
+          const totalPollVotes = msg.poll ? msg.poll.options.reduce((s, o) => s + o.votes.length, 0) : 0;
+
           return <article id={`msg-${msg.id}`} key={msg.id} className={cx('message-row', isMine && 'mine', grouped && 'grouped', msg.pinned && 'message-pinned')}>
-            {!grouped && <button type="button" className="message-avatar" aria-label={t('profile')} title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}><Avatar user={person} size="sm"/></button>}
+            {!grouped && <button type="button" className="message-avatar" aria-label={t('profile')} title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}><Avatar user={person} size="sm" /></button>}
             {grouped && <time className="group-time" title={fmtTime(msg.ts, lang)}>{fmtTime(msg.ts, lang)}</time>}
             <div className="message-main">
-              {!grouped && <div className="message-byline"><button className="message-name" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{person.name}</button>{hasAura(person.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: person.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: person.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10}/></span>}<time>{fmtTime(msg.ts, lang)}</time>{isMine && <span className="message-mine-tag">{t('you')}</span>}</div>}
-              {replyMessage && <button className="reply-preview" onClick={() => jumpTo(replyMessage.id)}><Icon name="reply" size={12}/><span>{t('replyBadge')} {data.users[replyMessage.by]?.name ?? t('you')}:</span><em>{replyMessage.text || replyMessage.sticker}</em></button>}
-              {editId === msg.id ? <form className="edit-message" onSubmit={(e) => { e.preventDefault(); editSave(msg); }}><input ref={editRef} value={editText} maxLength={maxChars} onChange={(e) => setEditText(e.target.value)}/><div><button type="button" className="text-action" onClick={() => setEditId(null)}>{t('cancel')}</button><button type="submit" className="btn btn-primary btn-small">{t('save')}</button></div></form> : <>
-                {msg.text && <p className="message-text">{msg.text}{msg.edited && <span className="edited-label"> · {t('edit').toLowerCase()}</span>}</p>}
+              {!grouped && <div className="message-byline"><button className="message-name" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{person.name}</button>{hasAura(person.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: person.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: person.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}{person.isAdmin && <span className="admin-tag">{t('admin')}</span>}<time>{fmtTime(msg.ts, lang)}</time>{isMine && <span className="message-mine-tag">{t('you')}</span>}</div>}
+              {replyMessage && <button className="reply-preview" onClick={() => jumpTo(replyMessage.id)}><Icon name="reply" size={12} /><span>{t('replyBadge')} {data.users[replyMessage.by]?.name ?? t('you')}:</span><em>{replyMessage.text || replyMessage.sticker || replyMessage.poll?.question || '📷'}</em></button>}
+              {editId === msg.id ? <form className="edit-message" onSubmit={(e) => { e.preventDefault(); editSave(msg); }}><input ref={editRef} value={editText} maxLength={maxChars} onChange={(e) => setEditText(e.target.value)} /><div><button type="button" className="text-action" onClick={() => setEditId(null)}>{t('cancel')}</button><button type="submit" className="btn btn-primary btn-small">{t('save')}</button></div></form> : <>
+                {msg.text && <div className="message-text">{renderRichText(msg.text)}{msg.edited && <span className="edited-label"> · {t('edit').toLowerCase()}</span>}</div>}
                 {msg.sticker && <div className="message-sticker">{msg.sticker}</div>}
-                {msg.image && <img className="message-image" src={msg.image} alt="" loading="lazy"/>}
+                {msg.image && <button type="button" className="message-image-btn" onClick={() => setLightboxSrc(msg.image!)}><img className="message-image" src={msg.image} alt="" loading="lazy" /></button>}
+                {msg.poll && <div className="message-poll">
+                  <div className="poll-head"><Icon name="barChart" size={15} /><strong>{msg.poll.question}</strong></div>
+                  <div className="poll-options">
+                    {msg.poll.options.map((opt) => {
+                      const pct = totalPollVotes > 0 ? Math.round((opt.votes.length / totalPollVotes) * 100) : 0;
+                      const picked = opt.votes.includes(user.id);
+                      return <button key={opt.id} type="button" className={`poll-option ${picked ? 'picked' : ''}`} onClick={() => votePoll(msg.ch, msg.id, opt.id, user.id)}>
+                        <span className="poll-bar" style={{ width: `${pct}%` }} />
+                        <span className="poll-label">{picked && <Icon name="check" size={12} />}{opt.text}</span>
+                        <span className="poll-pct">{pct}%</span>
+                      </button>;
+                    })}
+                  </div>
+                  <small className="poll-foot">{t('pollVotes', { count: totalPollVotes })}</small>
+                </div>}
               </>}
-              {Object.keys(msg.reactions).length > 0 && <div className="reactions">{Object.entries(msg.reactions).map(([emoji, ids]) => <button key={emoji} className={`reaction ${ids.includes(user.id) ? 'reacted' : ''}`} onClick={() => { void onReaction(msg, emoji); }}><span>{emoji}</span><small>{ids.length}</small></button>)}<button className="reaction-add" aria-label={t('react')} onClick={() => setMoreFor(moreFor === `r:${msg.id}` ? null : `r:${msg.id}`)}><Icon name="plus" size={12}/></button></div>}
+              {Object.keys(msg.reactions).length > 0 && <div className="reactions">{Object.entries(msg.reactions).map(([emoji, ids]) => <button key={emoji} className={`reaction ${ids.includes(user.id) ? 'reacted' : ''}`} onClick={() => { void onReaction(msg, emoji); }}><span>{emoji}</span><small>{ids.length}</small></button>)}<button className="reaction-add" aria-label={t('react')} onClick={() => setMoreFor(moreFor === `r:${msg.id}` ? null : `r:${msg.id}`)}><Icon name="plus" size={12} /></button></div>}
             </div>
-            {!editId && <div className="message-actions"><button className="action-tiny" aria-label={t('react')} title={t('react')} onClick={(e) => { e.stopPropagation(); setMoreFor(moreFor === `r:${msg.id}` ? null : `r:${msg.id}`); }}><Icon name="smile" size={14}/></button><button className="action-tiny" aria-label={t('reply')} title={t('reply')} onClick={() => quote(msg)}><Icon name="reply" size={14}/></button><button className="action-tiny" aria-label={t('more')} title={t('more')} onClick={(e) => { e.stopPropagation(); setMoreFor(moreFor === `m:${msg.id}` ? null : `m:${msg.id}`); }}><Icon name="more" size={14}/></button>
+            {!editId && <div className="message-actions"><button className="action-tiny" aria-label={t('react')} title={t('react')} onClick={(e) => { e.stopPropagation(); setMoreFor(moreFor === `r:${msg.id}` ? null : `r:${msg.id}`); }}><Icon name="smile" size={14} /></button><button className="action-tiny" aria-label={t('reply')} title={t('reply')} onClick={() => quote(msg)}><Icon name="reply" size={14} /></button><button className="action-tiny" aria-label={t('more')} title={t('more')} onClick={(e) => { e.stopPropagation(); setMoreFor(moreFor === `m:${msg.id}` ? null : `m:${msg.id}`); }}><Icon name="more" size={14} /></button>
               {moreFor === `r:${msg.id}` && <div className="reaction-flyout" onClick={(e) => e.stopPropagation()}>{quickEmoji.map((emoji) => <button key={emoji} aria-label={`${t('react')} ${emoji}`} onClick={() => { void onReaction(msg, emoji); setMoreFor(null); }}>{emoji}</button>)}</div>}
-              {moreFor === `m:${msg.id}` && <div className="message-menu" onClick={(e) => e.stopPropagation()}><button onClick={() => quote(msg)}><Icon name="reply" size={14}/>{t('reply')}</button><button onClick={async () => { try { await navigator.clipboard.writeText(msg.text); tell(t('copied'), 'good'); } catch { tell(t('err.generic'), 'bad'); } setMoreFor(null); }}><Icon name="copy" size={14}/>{t('copy')}</button><button onClick={() => { void onPin(msg); }}><Icon name="pin" size={14}/>{msg.pinned ? t('unpin') : t('pin')}</button>{isMine && <button onClick={() => editStart(msg)}><Icon name="edit" size={14}/>{t('edit')}</button>}<button className="danger-action" onClick={() => { setConfirmDelete(msg); setConfirmDeleteEveryone(isMine); setMoreFor(null); }}><Icon name="trash" size={14}/>{t('delete')}</button></div>}
+              {moreFor === `m:${msg.id}` && <div className="message-menu" onClick={(e) => e.stopPropagation()}><button onClick={() => quote(msg)}><Icon name="reply" size={14} />{t('reply')}</button>{msg.text && <button onClick={async () => { try { await navigator.clipboard.writeText(msg.text); tell(t('copied'), 'good'); } catch { tell(t('err.generic'), 'bad'); } setMoreFor(null); }}><Icon name="copy" size={14} />{t('copy')}</button>}<button onClick={() => { void onPin(msg); }}><Icon name="pin" size={14} />{msg.pinned ? t('unpin') : t('pin')}</button>{isMine && msg.text && <button onClick={() => editStart(msg)}><Icon name="edit" size={14} />{t('edit')}</button>}<button className="danger-action" onClick={() => { setConfirmDelete(msg); setConfirmDeleteEveryone(isMine); setMoreFor(null); }}><Icon name="trash" size={14} />{t('delete')}</button></div>}
             </div>}
           </article>;
         })}
       </div>
 
-      {newMessageCount > 0 && <button type="button" className="new-messages-jump" onClick={() => { const el = scrollRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); nearBottomRef.current = true; setNewMessageCount(0); }}><Icon name="down" size={15}/>{t('newMessagesCount', { count: newMessageCount })}</button>}
-      {reply && !blockedConversation && <div className="replying-bar"><Icon name="reply" size={14}/><span>{t('replyBadge')} <b>{data.users[messages.find((m) => m.id === reply)?.by ?? '']?.name ?? t('you')}</b></span><em>{messages.find((m) => m.id === reply)?.text}</em><button className="icon-btn" aria-label={t('cancel')} onClick={() => setReply(undefined)}><Icon name="close" size={13}/></button></div>}
+      {newMessageCount > 0 && <button type="button" className="new-messages-jump" onClick={() => { const el = scrollRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); nearBottomRef.current = true; setNewMessageCount(0); }}><Icon name="down" size={15} />{t('newMessagesCount', { count: newMessageCount })}</button>}
+      {reply && !blockedConversation && <div className="replying-bar"><Icon name="reply" size={14} /><span>{t('replyBadge')} <b>{data.users[replyTargetMsg?.by ?? '']?.name ?? t('you')}</b></span><em>{replyTargetMsg?.text || replyTargetMsg?.sticker || replyTargetMsg?.poll?.question || '📷'}</em><button className="icon-btn" aria-label={t('cancel')} onClick={() => setReply(undefined)}><Icon name="close" size={13} /></button></div>}
+
       <form className="composer-wrap" onSubmit={submit}>
-        {emojiOpen && <div className="composer-emoji" role="group" aria-label={t('emoji')}>{user.stickerPack && data.listings[user.stickerPack]?.stickers?.map((emoji, i) => <button key={`pack-${emoji}-${i}`} type="button" title={t('stickers')} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: emoji, reply }); setReply(undefined); setEmojiOpen(false); } catch (e) { report(e); } }}>{emoji}</button>)}{quickEmoji.concat(['😊', '🪩', '🌈', '🍓', '☕', '🪴', '🫧', '😌', '💫', '🧸', '🦋', '🪐']).map((emoji, i) => <button key={`${emoji}${i}`} type="button" onClick={() => { setComposer((v) => v + emoji); setEmojiOpen(false); textareaRef.current?.focus(); }}>{emoji}</button>)}</div>}
-        {blockedConversation ? <div className="blocked-composer-note">{t('blockedConversationSub')}</div> : <div className="composer-box">
-          <div className="composer-rail"><button className="composer-icon" type="button" title={t('attach')} aria-label={t('attach')} disabled={imageBusy} onClick={() => imageRef.current?.click()}><Icon name="image" size={18}/></button><input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={attachPicture}/><button className="composer-gif" type="button" title={t('attachGif')} aria-label={t('attachGif')} disabled={imageBusy} onClick={() => gifRef.current?.click()}>GIF</button><input ref={gifRef} hidden type="file" accept="image/gif" onChange={attachPicture}/></div>
-          <textarea ref={textareaRef} rows={1} placeholder={imageBusy ? t('loading') : t('messagePlaceholder')} value={composer} maxLength={maxChars} onChange={(e) => setComposer(e.target.value)} onKeyDown={keySend} aria-label={t('messagePlaceholder')} />
-          <button className="composer-icon emoji-toggle" type="button" aria-label={t('emoji')} title={t('emoji')} onClick={() => setEmojiOpen((v) => !v)}><Icon name="smile" size={18}/></button>
-          <span className="composer-count">{composer.length > maxChars - 120 ? `${composer.length}/${maxChars}` : ''}</span>
-          <button type="submit" className="send-btn" disabled={!composer.trim() || imageBusy} aria-label={t('send')} title={t('send')}><Icon name="send" size={17}/></button>
+        {emojiOpen && <div className="composer-emoji" role="group" aria-label={t('emoji')}>
+          {ownedStickerPacks.map((pack) => (
+            <div key={pack.id} className="composer-pack-group">
+              <small>{pack.name}</small>
+              <div className="composer-pack-row">
+                {pack.stickers?.map((emoji, i) => <button key={`${pack.id}-${emoji}-${i}`} type="button" title={pack.name} onClick={async () => { try { await sendMessage({ channel, userId: user.id, text: '', sticker: emoji, reply }); setReply(undefined); setEmojiOpen(false); } catch (err) { report(err); } }}>{emoji}</button>)}
+              </div>
+            </div>
+          ))}
+          <div className="composer-pack-row">
+            {quickEmoji.concat(['😊', '🪩', '🌈', '🍓', '☕', '🪴', '🫧', '😌', '💫', '🧸', '🦋', '🪐']).map((emoji, i) => <button key={`${emoji}${i}`} type="button" onClick={() => { setComposer((v) => v + emoji); setEmojiOpen(false); textareaRef.current?.focus(); }}>{emoji}</button>)}
+          </div>
         </div>}
-        <div className="composer-caption"><span>{t('messageHint')}</span>{activeAura && <span className="aura-caption"><Icon name="spark" size={11}/> {activeAura.tier.toUpperCase()}</span>}</div>
+
+        {isSuspended ? <div className="blocked-composer-note">{t('suspendedNotice')}</div> : blockedConversation ? <div className="blocked-composer-note">{t('blockedConversationSub')}</div> : isBroadcastLocked ? <div className="blocked-composer-note"><Icon name="megaphone" size={15} /> {t('broadcastOnly')}</div> : <div className="composer-box">
+          <div className="composer-rail">
+            <button className="composer-icon" type="button" title={t('attach')} aria-label={t('attach')} disabled={imageBusy} onClick={() => imageRef.current?.click()}><Icon name="image" size={18} /></button>
+            <input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={attachPicture} />
+            <button className="composer-gif" type="button" title={t('attachGif')} aria-label={t('attachGif')} disabled={imageBusy} onClick={() => gifRef.current?.click()}>GIF</button>
+            <input ref={gifRef} hidden type="file" accept="image/gif" onChange={attachPicture} />
+            {!remoteHistory && <button className="composer-icon" type="button" title={t('createPoll')} aria-label={t('createPoll')} onClick={() => setPollOpen(true)}><Icon name="barChart" size={17} /></button>}
+          </div>
+          <textarea ref={textareaRef} rows={1} placeholder={imageBusy ? t('loading') : t('messagePlaceholder')} value={composer} maxLength={maxChars} onChange={(e) => setComposer(e.target.value)} onKeyDown={keySend} aria-label={t('messagePlaceholder')} />
+          <div className="composer-format-rail">
+            <button className="composer-fmt-btn" type="button" title={t('formatBold')} onClick={() => wrapSelection('**', '**')}><b>B</b></button>
+            <button className="composer-fmt-btn" type="button" title={t('formatCode')} onClick={() => wrapSelection('`', '`')}><code>&lt;/&gt;</code></button>
+            <button className="composer-fmt-btn" type="button" title={t('formatSpoiler')} onClick={() => wrapSelection('||', '||')}><span>||</span></button>
+          </div>
+          <button className="composer-icon emoji-toggle" type="button" aria-label={t('emoji')} title={t('emoji')} onClick={() => setEmojiOpen((v) => !v)}><Icon name="smile" size={18} /></button>
+          <span className="composer-count">{composer.length > maxChars - 160 ? `${composer.length}/${maxChars}` : ''}</span>
+          <button type="submit" className="send-btn" disabled={!composer.trim() || imageBusy} aria-label={t('send')} title={t('send')}><Icon name="send" size={17} /></button>
+        </div>}
+        <div className="composer-caption"><span>{t('messageHint')}</span>{activeAura && <span className="aura-caption"><Icon name="spark" size={11} /> ORBIT+ {activeAura.tier.toUpperCase()}</span>}</div>
       </form>
     </section>
 
-    {membersOpen && <aside className="members-drawer"><div className="members-head"><strong>{dm ? t('profile') : t('members')}</strong><button className="icon-btn" aria-label={t('cancel')} onClick={() => setMembersOpen(false)}><Icon name="close" size={16}/></button></div>{dm ? <><div className="profile-cover" style={{ '--cover-hue': other.hue || hueOf(other.username), backgroundImage: other.banner ? `url(${other.banner})` : undefined } as React.CSSProperties}/><div className={`profile-aside-card profile-template-${other.profileTemplate ?? 'clean'}`} style={{ '--profile-stroke': other.profileStroke } as React.CSSProperties}><Avatar user={other} size="lg" showStatus/><span className="member-presence">{t(other.presence)}</span><h2>{other.name}{hasAura(other.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10}/></span>}</h2>{birthdayPeople.includes(other.id) && <span className="birthday-pill">🎉 {t('birthdayToday')}</span>}<p className="profile-handle">@{other.username}</p>{other.bio && <p>{other.bio}</p>}{(other.profileTags ?? []).length > 0 && <div className="profile-tag-list">{other.profileTags!.map((tag) => <span key={tag}>{tag}</span>)}</div>}{other.statusText && <p className="profile-status">“{other.statusText}”</p>}{hasAura(other.id) && <span className="profile-plan"><Icon name="check" size={13}/>{t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })}</span>}<div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(other.createdAt) })}</span>{other.inventory.length > 0 && <span>{t('collectionCount', { count: other.inventory.length })}</span>}{(other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0 })}</span>}</div><div className="profile-management-actions"><button className="btn btn-outline btn-small" onClick={() => toggleMute()}><Icon name={mutedConversation ? 'bell' : 'moon'} size={14}/>{t(mutedConversation ? 'unmuteChat' : 'muteChat')}</button><button className="btn btn-danger-outline btn-small" onClick={() => setConfirmBlock(true)}><Icon name="lock" size={14}/>{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button></div><button className="btn btn-secondary btn-full" onClick={() => setMembersOpen(false)}>{t('backToApp')}</button></div></> : <><div className="member-list">{people.map((p) => <div key={p.id} className="member-row"><button className="member-row-main" onClick={() => { if (p.id !== user.id) { setChannel(startDM(user.id, p.id)); setMembersOpen(false); } }}><Avatar user={p} size="sm" showStatus/><span><b>{p.name}</b><small>{t(activeHub!.members[p.id] === 'owner' ? 'owner' : activeHub!.members[p.id] === 'mod' ? 'moderator' : 'member')}</small></span></button>{activeHub!.ownerId === user.id && p.id !== user.id && <div className="member-role-actions"><button className="member-role-chip" disabled={hubRoleBusy === p.id} onClick={() => void changeHubMemberRole(p.id)}>{t(activeHub!.members[p.id] === 'mod' ? 'demoteMember' : 'promoteMember')}</button><button className="member-kick-chip" disabled={hubRoleBusy === p.id} onClick={() => void kickHubMember(p.id)} aria-label={t('removeMember')} title={t('removeMember')}><Icon name="close" size={13}/></button></div>}</div>)}</div><div className="member-drawer-actions"><button className="btn btn-outline btn-small" onClick={async () => { const url = `${window.location.origin}/invite/${activeHub!.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={14}/>{t('inviteCopy')}</button>{activeHub!.ownerId !== user.id && <button className="btn btn-ghost btn-small" onClick={() => { setMembersOpen(false); setLeaveOpen(true); }}><Icon name="back" size={14}/>{t('leaveHub')}</button>}</div></>}</aside>}
+    {membersOpen && <aside className="members-drawer"><div className="members-head"><strong>{dm ? t('profile') : t('members')}</strong><button className="icon-btn" aria-label={t('cancel')} onClick={() => setMembersOpen(false)}><Icon name="close" size={16} /></button></div>{dm ? <><div className="profile-cover" style={{ '--cover-hue': other.hue || hueOf(other.username) } as React.CSSProperties} /><div className="profile-aside-card"><Avatar user={other} size="lg" showStatus /><span className="member-presence">{t(other.presence)}</span><h2>{other.name}{hasAura(other.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</h2><p className="profile-handle">@{other.username}</p>{other.bio && <p>{other.bio}</p>}{other.statusText && <p className="profile-status">“{other.statusText}”</p>}{hasAura(other.id) && <span className="profile-plan"><Icon name="check" size={13} />{t('profilePlanLabel', { plan: other.aura?.tier.toUpperCase() ?? 'ORBIT+' })}</span>}<div className="profile-public-facts"><span>{t('memberSince', { date: new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(other.createdAt) })}</span>{other.inventory.length > 0 && <span>{t('collectionCount', { count: other.inventory.length })}</span>}{(other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0) > 0 && <span>{t('giftsReceived', { count: other.giftsReceivedCount ?? other.giftsReceived?.length ?? 0 })}</span>}</div><button className="btn btn-secondary btn-full" onClick={() => setMembersOpen(false)}>{t('backToApp')}</button></div></> : <><div className="member-list">{people.map((p) => <button key={p.id} className="member-row" onClick={() => { if (p.id !== user.id) { setChannel(startDM(user.id, p.id)); setMembersOpen(false); } }}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}</b><small>{p.statusText || t(p.presence)}</small></span>{activeHub?.members[p.id] === 'owner' && <span className="role-chip owner">{t('owner')}</span>}{activeHub?.members[p.id] === 'mod' && <span className="role-chip mod">{t('moderator')}</span>}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}</button>)}</div><div className="member-drawer-actions">{canManageHub && <button className="btn btn-outline btn-small" onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={14} />{t('hubSettings')}</button>}<button className="btn btn-outline btn-small" onClick={async () => { const url = `${window.location.origin}/invite/${activeHub!.invite}`; try { await navigator.clipboard.writeText(url); tell(t('inviteCopied'), 'good'); } catch { tell(url, 'info'); } }}><Icon name="link" size={14} />{t('inviteCopy')}</button>{activeHub!.ownerId !== user.id && <button className="btn btn-ghost btn-small" onClick={() => { setMembersOpen(false); setLeaveOpen(true); }}><Icon name="back" size={14} />{t('leaveHub')}</button>}</div></>}</aside>}
 
-    {activeHub && <HubSettingsModal open={hubSettingsOpen} onClose={() => setHubSettingsOpen(false)} hub={activeHub} onSave={saveHubSettings} onSaveRoom={saveHubRoomSettings}/>}
-    <Modal open={!!confirmDelete} onClose={() => { setConfirmDelete(null); setConfirmDeleteEveryone(false); }} title={t('deleteConfirm')} subtitle={t(confirmDelete && canDeleteMessageForEveryone(confirmDelete.ch, confirmDelete, user.id) ? 'deleteConfirmSubOwn' : 'deleteConfirmSubOther')} size="sm">{confirmDelete && canDeleteMessageForEveryone(confirmDelete.ch, confirmDelete, user.id) && <label className="delete-everyone-toggle"><input type="checkbox" checked={confirmDeleteEveryone} onChange={(event) => setConfirmDeleteEveryone(event.target.checked)}/><span>{t('deleteForEveryone')}</span></label>}<div className="modal-actions"><button className="btn btn-secondary" onClick={() => { setConfirmDelete(null); setConfirmDeleteEveryone(false); }}>{t('cancel')}</button><button className="btn btn-danger" onClick={onDelete}>{t('delete')}</button></div></Modal>
+    <Modal open={pinnedOpen} onClose={() => setPinnedOpen(false)} title={t('pinnedMessages')} size="md">
+      {pinned.length ? <div className="pinned-list">{pinned.map((pm) => <div key={pm.id} className="pinned-item">
+        <div className="pinned-item-body"><b>{data.users[pm.by]?.name ?? t('you')}</b><p>{pm.text || pm.sticker || pm.poll?.question || '📷'}</p><small>{fmtTime(pm.ts, lang)}</small></div>
+        <button className="btn btn-outline btn-small" onClick={() => { setPinnedOpen(false); jumpTo(pm.id); }}>{t('viewHub')}</button>
+        <button className="icon-btn" title={t('unpin')} onClick={() => void onPin(pm)}><Icon name="close" size={14} /></button>
+      </div>)}</div> : <p className="subtle-empty">{t('noPinned')}</p>}
+    </Modal>
+
+    <Modal open={!!lightboxSrc} onClose={() => setLightboxSrc(null)} title={t('attach')} size="lg">
+      {lightboxSrc && <div className="lightbox-wrap"><img src={lightboxSrc} alt="" className="lightbox-img" /></div>}
+    </Modal>
+
+    <Modal open={pollOpen} onClose={() => setPollOpen(false)} title={t('createPoll')} size="sm">
+      <form className="stack-form" onSubmit={submitPoll}>
+        <label className="field-label">{t('pollQuestion')}<input className="field-input" autoFocus value={pollQuestion} onChange={(e) => setPollQuestion(e.target.value)} maxLength={160} required /></label>
+        {pollOptions.map((opt, idx) => (
+          <label key={idx} className="field-label">{t('pollOption', { n: idx + 1 })}
+            <input className="field-input" value={opt} onChange={(e) => setPollOptions((prev) => prev.map((v, i) => i === idx ? e.target.value : v))} maxLength={80} required={idx < 2} />
+          </label>
+        ))}
+        {pollOptions.length < 5 && <button type="button" className="btn btn-ghost btn-small" onClick={() => setPollOptions((p) => [...p, ''])}><Icon name="plus" size={14} />{t('addOption')}</button>}
+        <div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setPollOpen(false)}>{t('cancel')}</button><button type="submit" className="btn btn-primary">{t('send')}</button></div>
+      </form>
+    </Modal>
+
+    {activeHub && hubManageOpen && <HubSettingsModal open={hubManageOpen} onClose={() => setHubManageOpen(false)} hub={activeHub} db={data} user={user} />}
+
+    <Modal open={!!confirmDelete} onClose={() => { setConfirmDelete(null); setConfirmDeleteEveryone(false); }} title={t('deleteConfirm')} subtitle={t(confirmDelete && canDeleteMessageForEveryone(confirmDelete.ch, confirmDelete, user.id) ? 'deleteConfirmSubOwn' : 'deleteConfirmSubOther')} size="sm">{confirmDelete && canDeleteMessageForEveryone(confirmDelete.ch, confirmDelete, user.id) && <label className="delete-everyone-toggle"><input type="checkbox" checked={confirmDeleteEveryone} onChange={(event) => setConfirmDeleteEveryone(event.target.checked)} /><span>{t('deleteForEveryone')}</span></label>}<div className="modal-actions"><button className="btn btn-secondary" onClick={() => { setConfirmDelete(null); setConfirmDeleteEveryone(false); }}>{t('cancel')}</button><button className="btn btn-danger" onClick={onDelete}>{t('delete')}</button></div></Modal>
     <Modal open={confirmClear} onClose={() => setConfirmClear(false)} title={t('clearHistory')} subtitle={t('clearHistoryConfirm')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setConfirmClear(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={clearConversation}>{t('clearHistory')}</button></div></Modal>
     <Modal open={confirmBlock} onClose={() => !blockBusy && setConfirmBlock(false)} title={t(blockedConversation ? 'unblockUser' : 'blockUser')} subtitle={t(blockedConversation ? 'unblockConfirm' : 'blockConfirm', { name: other.name })} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setConfirmBlock(false)} disabled={blockBusy}>{t('cancel')}</button><button className={blockedConversation ? 'btn btn-primary' : 'btn btn-danger'} onClick={() => void confirmBlockChange()} disabled={blockBusy}>{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button></div></Modal>
     <Modal open={leaveOpen} onClose={() => setLeaveOpen(false)} title={t('leaveConfirm')} subtitle={t('leaveHubSub')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setLeaveOpen(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={() => void confirmLeaveHub()}>{t('leaveHub')}</button></div></Modal>
-    <Modal open={newRoomOpen} onClose={() => setNewRoomOpen(false)} title={t('addRoom')} subtitle={t('newRoom')} size="sm"><form className="stack-form" onSubmit={createRoom}><label className="field-label">{t('newRoom')}<span className="input-prefix-wrap"><span className="input-prefix">#</span><input autoFocus className="field-input prefix-field" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="behind-the-scenes" maxLength={24}/></span></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setNewRoomOpen(false)}>{t('cancel')}</button><button className="btn btn-primary">{t('create')}</button></div></form></Modal>
+    <Modal open={newRoomOpen} onClose={() => setNewRoomOpen(false)} title={t('addRoom')} subtitle={t('newRoom')} size="sm"><form className="stack-form" onSubmit={createRoom}><label className="field-label">{t('newRoom')}<span className="input-prefix-wrap"><span className="input-prefix">#</span><input autoFocus className="field-input prefix-field" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="behind-the-scenes" maxLength={24} /></span></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setNewRoomOpen(false)}>{t('cancel')}</button><button className="btn btn-primary">{t('create')}</button></div></form></Modal>
   </div>;
-}
-
-
-function HubSettingsModal({ open, onClose, hub, onSave, onSaveRoom }: { open: boolean; onClose: () => void; hub: Hub; onSave: (details: { name: string; about: string; emoji: string; hue: number; isPublic: boolean }) => void; onSaveRoom: (roomId: string, details: { topic: string; kind: 'text' | 'broadcast' }) => void }) {
-  const { t } = useI18n();
-  const [name, setName] = useState(hub.name); const [about, setAbout] = useState(hub.about); const [emoji, setEmoji] = useState(hub.emoji); const [hue, setHue] = useState(hub.hue); const [isPublic, setPublic] = useState(hub.public); const [roomDrafts, setRoomDrafts] = useState<Record<string, { topic: string; kind: 'text' | 'broadcast' }>>({});
-  useEffect(() => { setName(hub.name); setAbout(hub.about); setEmoji(hub.emoji); setHue(hub.hue); setPublic(hub.public); setRoomDrafts(Object.fromEntries(hub.rooms.map((room) => [room.id, { topic: room.topic, kind: room.kind }]))); }, [hub.id, hub.name, hub.about, hub.emoji, hub.hue, hub.public, hub.rooms]);
-  return <Modal open={open} onClose={onClose} title={t('hubSettingsTitle')} subtitle={t('hubSettingsSub')} size="md"><form className="stack-form hub-settings-form" onSubmit={(event) => { event.preventDefault(); onSave({ name, about, emoji, hue, isPublic }); }}><label className="field-label">{t('hubNameField')}<input className="field-input" value={name} onChange={(event) => setName(event.target.value)} maxLength={40}/></label><label className="field-label">{t('hubAboutField')}<textarea className="field-input field-textarea" value={about} onChange={(event) => setAbout(event.target.value)} maxLength={160}/></label><div className="hub-settings-row"><label className="field-label">{t('hubEmojiField')}<input className="field-input" value={emoji} onChange={(event) => setEmoji(event.target.value)} maxLength={4}/></label><label className="field-label">{t('hubHueField')}<input className="field-input" type="range" min="0" max="360" value={hue} onChange={(event) => setHue(Number(event.target.value))}/></label></div><label className="hub-public-toggle"><input type="checkbox" checked={isPublic} onChange={(event) => setPublic(event.target.checked)}/>{t('hubPublic')}</label><section className="hub-room-settings"><h3>{t('rooms')}</h3>{hub.rooms.map((room) => { const draft = roomDrafts[room.id] ?? { topic: room.topic, kind: room.kind }; return <div className="hub-room-setting" key={room.id}><b># {room.name}</b><input className="field-input" maxLength={120} placeholder={t('roomTopic')} value={draft.topic} onChange={(event) => setRoomDrafts((items) => ({ ...items, [room.id]: { ...draft, topic: event.target.value } }))}/><select className="field-input" value={draft.kind} onChange={(event) => setRoomDrafts((items) => ({ ...items, [room.id]: { ...draft, kind: event.target.value as 'text' | 'broadcast' } }))}><option value="text">{t('roomTypeText')}</option><option value="broadcast">{t('roomTypeBroadcast')}</option></select><button type="button" className="btn btn-outline btn-small" onClick={() => onSaveRoom(room.id, draft)}>{t('save')}</button></div>; })}</section><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>{t('cancel')}</button><button className="btn btn-primary">{t('save')}</button></div></form></Modal>;
 }

@@ -1,8 +1,8 @@
-import { LIMITS } from '../config';
+import { AURA, LIMITS } from '../config';
 import { uid } from '../lib/util';
 import { db } from './db';
 import { AppError } from './errors';
-import type { Message, User } from './types';
+import type { Message, PollData, User } from './types';
 import { getAura } from './market';
 import { deleteRemoteHubMessage, deleteRemoteMessage, editRemoteHubMessage, editRemoteMessage, fetchOlderRemoteHubMessages, fetchOlderRemoteMessages, insertRemoteHubMessage, insertRemoteMessage, pinRemoteHubMessage, pinRemoteMessage, toggleRemoteHubReaction, toggleRemoteReaction, updateRemoteBlock, updateRemoteProfile } from './cloud';
 import { setBlocked } from './chatControls';
@@ -41,22 +41,33 @@ export function hasAccess(channel: string, userId: string): boolean {
   return false;
 }
 
+export function canPostInChannel(channel: string, userId: string): boolean {
+  if (!hasAccess(channel, userId)) return false;
+  const user = db.get().users[userId];
+  if (user?.suspended) return false;
+  for (const hub of Object.values(db.get().hubs)) {
+    const room = hub.rooms.find((r) => r.id === channel);
+    if (room) {
+      if (room.kind === 'broadcast') return ['owner', 'mod'].includes(hub.members[userId] ?? '');
+      return true;
+    }
+  }
+  return true;
+}
+
 function isRemoteHubChannel(channel: string, userId: string): boolean {
   return Object.values(db.get().hubs).some((hub) => hub.remote && !!hub.members[userId] && hub.rooms.some((room) => room.id === channel));
 }
 
-export function sendMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string }): Message | Promise<Message> {
-  if (!hasAccess(input.channel, input.userId)) throw new AppError('err.notMember');
-  const hub = Object.values(db.get().hubs).find((item) => item.rooms.some((room) => room.id === input.channel));
-  const room = hub?.rooms.find((item) => item.id === input.channel);
-  if (room?.kind === 'broadcast' && !['owner', 'mod'].includes(hub?.members[input.userId] ?? '')) throw new AppError('err.notMember');
+export function sendMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string; poll?: PollData }): Message | Promise<Message> {
+  if (!canPostInChannel(input.channel, input.userId)) throw new AppError('err.messageRestricted');
   const text = input.text.replace(/\r\n?/g, '\n').trim();
   const user = db.get().users[input.userId];
   if (!user) throw new AppError('err.notMember');
   const activeAura = getAura(user);
   const imageMax = activeAura?.tier === 'nova' ? LIMITS.imageCharsAura : activeAura ? LIMITS.imageChars : LIMITS.avatarChars;
-  if (!text && !input.sticker && !input.image) throw new AppError('err.emptyMessage');
-  const max = activeAura?.tier === 'nova' ? LIMITS.messageNova : LIMITS.message;
+  if (!text && !input.sticker && !input.image && !input.poll) throw new AppError('err.emptyMessage');
+  const max = activeAura ? AURA[activeAura.tier].maxChars : LIMITS.message;
   if (text.length > max) throw new AppError('err.messageLong');
   if (input.image && (!/^data:image\/(?:jpeg|gif);base64,[a-zA-Z0-9+/=]+$/.test(input.image) || input.image.length > imageMax)) throw new AppError('err.imageTooBig');
   if (input.sticker && !/^[\p{Extended_Pictographic}\u200d\ufe0f\u{1f1e6}-\u{1f1ff}]{1,24}$/u.test(input.sticker)) throw new AppError('err.badText');
@@ -66,13 +77,24 @@ export function sendMessage(input: { channel: string; userId: string; text: stri
   }
   if (isRemoteHubChannel(input.channel, input.userId)) return insertRemoteHubMessage({ ...input, text });
   const id = uid(18);
-  const msg: Message = { id, ch: input.channel, by: input.userId, text, ts: Date.now(), reactions: {}, reply: input.reply, sticker: input.sticker, image: input.image };
+  const msg: Message = { id, ch: input.channel, by: input.userId, text, ts: Date.now(), reactions: {}, reply: input.reply, sticker: input.sticker, image: input.image, poll: input.poll };
   db.transaction((d) => {
     d.msgs[input.channel] ??= [];
     if (d.msgs[input.channel].length >= LIMITS.perChannel) d.msgs[input.channel].shift();
     d.msgs[input.channel].push(msg);
   });
   return msg;
+}
+
+export function votePoll(channel: string, messageId: string, optionId: string, userId: string): void {
+  db.transaction((d) => {
+    const msg = d.msgs[channel]?.find((m) => m.id === messageId);
+    if (!msg?.poll || !hasAccess(channel, userId)) throw new AppError('err.notMember');
+    for (const opt of msg.poll.options) {
+      opt.votes = opt.votes.filter((id) => id !== userId);
+      if (opt.id === optionId) opt.votes.push(userId);
+    }
+  });
 }
 
 export function updateRead(userId: string, channel: string, at = Date.now()): void {
@@ -114,7 +136,8 @@ export function editMessage(channel: string, messageId: string, userId: string, 
   const clean = text.trim().replace(/\r\n?/g, '\n');
   if (!clean) throw new AppError('err.emptyMessage');
   const user = db.get().users[userId];
-  const max = user && getAura(user)?.tier === 'nova' ? LIMITS.messageNova : LIMITS.message;
+  const activeAura = user ? getAura(user) : null;
+  const max = activeAura ? AURA[activeAura.tier].maxChars : LIMITS.message;
   if (clean.length > max) throw new AppError('err.messageLong');
   const dm = parseDM(channel);
   if (dm && dm[0] !== dm[1] && dm.every((id) => db.get().users[id]?.serverBacked)) {
@@ -133,7 +156,9 @@ export function deleteMessage(channel: string, messageId: string, userId: string
   const dm = parseDM(channel);
   const hub = Object.values(db.get().hubs).find((item) => item.rooms.some((room) => room.id === channel));
   const message = db.get().msgs[channel]?.find((item) => item.id === messageId);
+  const actor = db.get().users[userId];
   const canDelete = !!message && (message.by === userId
+    || !!actor?.isAdmin
     || (!!dm && dm[0] !== dm[1] && dm.includes(userId))
     || (!!hub && ['owner', 'mod'].includes(hub.members[userId] ?? '')));
   if (!canDelete) throw new AppError('err.notMember');
@@ -143,13 +168,14 @@ export function deleteMessage(channel: string, messageId: string, userId: string
   if (isRemoteHubChannel(channel, userId)) return deleteRemoteHubMessage(channel, messageId, userId);
   db.transaction((d) => {
     const msg = d.msgs[channel]?.find((m) => m.id === messageId);
-    if (!msg || msg.by !== userId) throw new AppError('err.notMember');
+    if (!msg || !canDelete) throw new AppError('err.notMember');
     d.msgs[channel] = d.msgs[channel].filter((m) => m.id !== messageId);
   });
 }
 
 export function canDeleteMessageForEveryone(channel: string, message: Message, userId: string): boolean {
   if (message.by === userId) return true;
+  if (db.get().users[userId]?.isAdmin) return true;
   const dm = parseDM(channel);
   if (dm && dm[0] !== dm[1] && dm.includes(userId)) return true;
   const hub = Object.values(db.get().hubs).find((item) => item.rooms.some((room) => room.id === channel));

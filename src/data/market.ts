@@ -4,10 +4,10 @@ import { db } from './db';
 import { AppError } from './errors';
 import type { AuraTier, Listing, ListingKind, ThemeData, FrameData, User } from './types';
 import { claimRemoteDaily, createRemoteListing, purchaseRemoteListing, removeRemoteListing } from './cloud';
+import { saveCosmetics } from './cosmetics';
 
 export function getAura(user: User) {
-  if (user.isOwner) return { tier: 'nova' as const, cycle: 'year' as const, since: 0, renews: Number.MAX_SAFE_INTEGER };
-  const sub = user.serverBacked ? null : user.aura;
+  const sub = user.aura;
   return sub && Math.abs(sub.renews) > Date.now() ? sub : null;
 }
 
@@ -30,9 +30,12 @@ export function claimDaily(userId: string): number | Promise<number> {
 export function buyListing(userId: string, listingId: string): void | Promise<void> {
   const remoteUser = db.get().users[userId]?.serverBacked;
   const remoteListing = db.get().listings[listingId]?.remote;
-  if (remoteUser) {
-    if (!remoteListing) throw new AppError('shopNotReady');
+  if (remoteUser && remoteListing) {
     return purchaseRemoteListing(userId, listingId);
+  }
+  if (remoteUser && !remoteListing) {
+    const item = db.get().listings[listingId];
+    if (!item || item.kind !== 'stickers') throw new AppError('shopNotReady');
   }
   db.transaction((d) => {
     const user = d.users[userId];
@@ -56,26 +59,30 @@ export function buyListing(userId: string, listingId: string): void | Promise<vo
 export function equipListing(userId: string, listingId: string): void {
   db.transaction((d) => {
     const user = d.users[userId];
-    if (!user || !user.inventory.includes(listingId)) throw new AppError('err.notMember');
+    if (!user || (!user.inventory.includes(listingId) && d.listings[listingId]?.sellerId !== userId)) {
+      throw new AppError('err.notMember');
+    }
     const item = d.listings[listingId];
     if (!item) throw new AppError('err.notMember');
-    if (item.kind === 'bundle') {
-      const isEquipped = user.theme === listingId && user.frame === listingId;
-      user.theme = isEquipped ? null : listingId;
-      user.frame = isEquipped ? null : listingId;
-    }
     if (item.kind === 'theme') user.theme = user.theme === listingId ? null : listingId;
     if (item.kind === 'stickers') user.stickerPack = user.stickerPack === listingId ? null : listingId;
     if (item.kind === 'frame') {
-      if (!getAura(user)) throw new AppError('auraLimit');
+      if (item.auraOnly && !getAura(user)) throw new AppError('auraLimit');
       user.frame = user.frame === listingId ? null : listingId;
     }
+    saveCosmetics(userId, {
+      theme: user.theme,
+      frame: user.frame,
+      stickerPack: user.stickerPack ?? null,
+    });
   });
 }
 
 export function giftListing(fromId: string, toId: string, listingId: string): void | Promise<void> {
-  if (db.get().users[fromId]?.serverBacked) {
-    if (!db.get().listings[listingId]?.remote) throw new AppError('shopNotReady');
+  const remoteUser = db.get().users[fromId]?.serverBacked;
+  const remoteListing = db.get().listings[listingId]?.remote;
+  if (remoteUser) {
+    if (!remoteListing) throw new AppError('shopNotReady');
     return purchaseRemoteListing(fromId, listingId, toId);
   }
   db.transaction((d) => {
@@ -113,13 +120,19 @@ export function createListing(input: {
   const userListings = Object.values(db.get().listings).filter((x) => x.sellerId === input.userId && !x.removed).length;
   if (userListings >= LIMITS.listings) throw new AppError('listingLimit');
   if (input.kind === 'stickers' && (!input.stickers || input.stickers.length < 6 || input.stickers.length > 12)) throw new AppError('err.stickerCount');
-  if ((input.kind === 'theme' || input.kind === 'bundle') && (!input.theme || !/^#[\da-f]{6}$/i.test(input.theme.accent))) throw new AppError('err.badText');
-  if (input.kind === 'frame' && (!input.frame?.colors.every((x) => /^#[\da-f]{6}$/i.test(x)) || !getAura(person))) throw new AppError('auraLimit');
-  if (input.kind === 'bundle' && !input.frame?.colors.every((x) => /^#[\da-f]{6}$/i.test(x))) throw new AppError('err.badText');
+  if (input.kind === 'theme' && (!input.theme || !/^#[\da-f]{6}$/i.test(input.theme.accent))) throw new AppError('err.badText');
+  if (input.kind === 'frame') {
+    if (!input.frame?.colors.every((x) => /^#[\da-f]{6}$/i.test(x))) throw new AppError('err.badText');
+    if (input.frame.spin && !getAura(person)) throw new AppError('auraLimit');
+  }
   if (person.serverBacked) {
     return createRemoteListing({
       userId: input.userId, kind: input.kind, name, about, price: input.price,
-      design: input.kind === 'theme' ? { ...input.theme! } : input.kind === 'bundle' ? { theme: { ...input.theme! }, frame: { ...input.frame! } } : { ...input.frame!, auraOnly: input.auraOnly === true },
+      design: input.kind === 'theme'
+        ? { ...input.theme! }
+        : input.kind === 'frame'
+          ? { ...input.frame!, auraOnly: input.auraOnly === true }
+          : { stickers: input.stickers!, auraOnly: input.auraOnly === true },
     });
   }
   const listing: Listing = {
@@ -129,18 +142,22 @@ export function createListing(input: {
   };
   db.transaction((d) => {
     d.listings[listing.id] = listing;
+    const creator = d.users[input.userId];
+    if (creator && !creator.inventory.includes(listing.id)) {
+      creator.inventory.push(listing.id);
+    }
   });
   return listing;
 }
 
 export function removeListing(userId: string, listingId: string): void | Promise<void> {
-  if (db.get().users[userId]?.serverBacked) {
-    if (!db.get().listings[listingId]?.remote) throw new AppError('shopNotReady');
+  if (db.get().users[userId]?.serverBacked && db.get().listings[listingId]?.remote) {
     return removeRemoteListing(userId, listingId);
   }
   db.transaction((d) => {
     const l = d.listings[listingId];
-    if (!l || l.sellerId !== userId) throw new AppError('err.notMember');
+    const actor = d.users[userId];
+    if (!l || (l.sellerId !== userId && !actor?.isAdmin)) throw new AppError('err.notMember');
     l.removed = true;
   });
 }
@@ -149,9 +166,9 @@ export function subscribeAura(userId: string, tier: AuraTier, cycle: 'month' | '
   db.transaction((d) => {
     const current = d.users[userId];
     if (!current) throw new AppError('err.notMember');
-    if (current.serverBacked) throw new AppError('subscriptionUnavailable');
     const days = cycle === 'month' ? 30 : 365;
     current.aura = { tier, cycle, since: Date.now(), renews: Date.now() + days * 86_400_000 };
+    saveCosmetics(userId, { aura: current.aura });
   });
 }
 
@@ -159,7 +176,8 @@ export function cancelAura(userId: string): void {
   db.transaction((d) => {
     const user = d.users[userId];
     if (!user?.aura) return;
-    user.aura.renews = -user.aura.renews; // negative expiry means no renewal; retain perks until its absolute date
+    user.aura.renews = -Math.abs(user.aura.renews); // negative expiry means no renewal; retain perks until its absolute date
+    saveCosmetics(userId, { aura: user.aura });
   });
 }
 

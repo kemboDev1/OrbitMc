@@ -1,72 +1,145 @@
-import { requireSupabase } from '../lib/supabase';
-import { AppError } from './errors';
 import { db } from './db';
+import { AppError } from './errors';
+import { saveCosmetics } from './cosmetics';
+import type { AuraTier, DB, ID, User } from './types';
 
-export interface AdminProfile {
-  id: string;
-  username: string;
-  display_name: string;
-  created_at: string;
-  presence: string;
+export function isAdminUser(user?: User | null): boolean {
+  if (!user) return false;
+  if (user.isAdmin) return true;
+  if (!user.serverBacked && user.id === 'demo_explorer') return true;
+  return false;
 }
 
-export interface FeedbackItem {
-  id: string;
-  username: string;
-  display_name: string;
-  category: 'idea' | 'problem' | 'other';
-  body: string;
-  status: 'new' | 'reviewing' | 'done';
-  created_at: string;
+export function toggleSelfAdminPreview(userId: ID): boolean {
+  let next = false;
+  db.transaction((d) => {
+    const user = d.users[userId];
+    if (!user) throw new AppError('err.notMember');
+    next = !user.isAdmin;
+    user.isAdmin = next;
+    saveCosmetics(userId, { isAdmin: next });
+  });
+  return next;
 }
 
-export async function isOrbitOwner(): Promise<boolean> {
-  const { data, error } = await requireSupabase().rpc('is_orbit_owner');
-  if (error) throw new AppError('err.backendUnavailable');
-  return data === true;
+export function adminGrantAura(actorId: ID, targetUserId: ID, tier: AuraTier | null): void {
+  db.transaction((d) => {
+    const actor = d.users[actorId];
+    const target = d.users[targetUserId];
+    if (!isAdminUser(actor) || !target) throw new AppError('err.notMember');
+    if (tier === null) {
+      target.aura = null;
+    } else {
+      target.aura = {
+        tier,
+        cycle: 'month',
+        since: Date.now(),
+        renews: Date.now() + 30 * 86_400_000,
+      };
+    }
+    saveCosmetics(targetUserId, { aura: target.aura });
+  });
 }
 
-export async function sendFeedback(category: FeedbackItem['category'], body: string): Promise<void> {
-  const { error } = await requireSupabase().rpc('submit_orbit_feedback', { feedback_category: category, feedback_body: body.trim() });
-  if (error) throw new AppError(error.code === 'PGRST202' ? 'err.backendUnavailable' : 'err.saveFailed');
+export function adminAdjustSparks(actorId: ID, targetUserId: ID, delta: number): void {
+  db.transaction((d) => {
+    const actor = d.users[actorId];
+    const target = d.users[targetUserId];
+    if (!isAdminUser(actor) || !target || !Number.isFinite(delta)) throw new AppError('err.notMember');
+    target.sparks = Math.max(0, Math.min(99_999, Math.round(target.sparks + delta)));
+  });
 }
 
-export async function listAdminProfiles(): Promise<AdminProfile[]> {
-  const { data, error } = await requireSupabase().from('profiles').select('id,username,display_name,created_at,presence').order('created_at', { ascending: false }).limit(500);
-  if (error) throw new AppError('err.backendUnavailable');
-  return (data ?? []) as AdminProfile[];
+export function adminToggleSuspended(actorId: ID, targetUserId: ID): boolean {
+  let suspended = false;
+  db.transaction((d) => {
+    const actor = d.users[actorId];
+    const target = d.users[targetUserId];
+    if (!isAdminUser(actor) || !target || target.id === actorId) throw new AppError('err.notMember');
+    suspended = !target.suspended;
+    target.suspended = suspended;
+  });
+  return suspended;
 }
 
-export async function listAdminFeedback(): Promise<FeedbackItem[]> {
-  const { data, error } = await requireSupabase().rpc('get_orbit_admin_feedback');
-  if (error) throw new AppError('err.backendUnavailable');
-  return Array.isArray(data) ? data as FeedbackItem[] : [];
+export function adminToggleUserRole(actorId: ID, targetUserId: ID): boolean {
+  let nextAdmin = false;
+  db.transaction((d) => {
+    const actor = d.users[actorId];
+    const target = d.users[targetUserId];
+    if (!isAdminUser(actor) || !target || target.id === actorId) throw new AppError('err.notMember');
+    nextAdmin = !target.isAdmin;
+    target.isAdmin = nextAdmin;
+    saveCosmetics(targetUserId, { isAdmin: nextAdmin });
+  });
+  return nextAdmin;
 }
 
-export async function setFeedbackStatus(id: string, status: FeedbackItem['status']): Promise<void> {
-  const { error } = await requireSupabase().rpc('set_orbit_feedback_status', { feedback_id: id, next_status: status });
-  if (error) throw new AppError('err.saveFailed');
+export function adminToggleListingFeatured(actorId: ID, listingId: ID): boolean {
+  let featured = false;
+  db.transaction((d) => {
+    const actor = d.users[actorId];
+    const listing = d.listings[listingId];
+    if (!isAdminUser(actor) || !listing) throw new AppError('err.notMember');
+    featured = !listing.featured;
+    listing.featured = featured;
+  });
+  return featured;
 }
 
-export async function getBirthdayVisibility(): Promise<boolean> {
-  const { data, error } = await requireSupabase().rpc('get_my_birthday_visibility');
-  if (error) throw new AppError('err.backendUnavailable');
-  return data === true;
+export function adminSetListingRemoved(actorId: ID, listingId: ID, removed: boolean): void {
+  db.transaction((d) => {
+    const actor = d.users[actorId];
+    const listing = d.listings[listingId];
+    if (!isAdminUser(actor) || !listing) throw new AppError('err.notMember');
+    listing.removed = removed;
+  });
 }
 
-export async function setBirthdayVisibility(visible: boolean): Promise<void> {
-  const { error } = await requireSupabase().rpc('set_birthday_visibility', { show_birthday: visible });
-  if (error) throw new AppError('err.saveFailed');
+export function adminToggleHubPublic(actorId: ID, hubId: ID): boolean {
+  let nextPublic = false;
+  db.transaction((d) => {
+    const actor = d.users[actorId];
+    const hub = d.hubs[hubId];
+    if (!isAdminUser(actor) || !hub) throw new AppError('err.notMember');
+    nextPublic = !hub.public;
+    hub.public = nextPublic;
+  });
+  return nextPublic;
 }
 
-export async function getBirthdayUserIds(): Promise<string[]> {
-  const { data, error } = await requireSupabase().rpc('get_birthday_profiles_today');
-  if (error) throw new AppError('err.backendUnavailable');
-  return Array.isArray(data) ? data.map((row: { user_id: string }) => row.user_id) : [];
+export function adminDeleteHub(actorId: ID, hubId: ID): void {
+  db.transaction((d) => {
+    const actor = d.users[actorId];
+    const hub = d.hubs[hubId];
+    if (!isAdminUser(actor) || !hub) throw new AppError('err.notMember');
+    for (const room of hub.rooms) delete d.msgs[room.id];
+    delete d.hubs[hubId];
+  });
 }
 
-export async function syncOwnerEntitlement(userId: string): Promise<boolean> {
-  const owner = await isOrbitOwner();
-  db.transaction((state) => { const user = state.users[userId]; if (user) user.isOwner = owner; });
-  return owner;
+export function getWorkspaceStats(data: DB) {
+  const users = Object.values(data.users).filter((u) => u.id !== 'orbit-studio' && !u.bot);
+  const onlineUsers = users.filter((u) => u.presence === 'online').length;
+  const auraUsers = users.filter((u) => !!u.aura && Math.abs(u.aura.renews) > Date.now()).length;
+  const hubs = Object.values(data.hubs);
+  const rooms = hubs.reduce((sum, h) => sum + h.rooms.length, 0);
+  const messages = Object.values(data.msgs).reduce((sum, list) => sum + list.length, 0);
+  const listings = Object.values(data.listings);
+  const activeListings = listings.filter((l) => !l.removed);
+  const totalSales = listings.reduce((sum, l) => sum + l.sales, 0);
+  const totalVolume = listings.reduce((sum, l) => sum + l.sales * l.price, 0);
+  return {
+    totalUsers: users.length,
+    onlineUsers,
+    auraUsers,
+    totalHubs: hubs.length,
+    publicHubs: hubs.filter((h) => h.public).length,
+    totalRooms: rooms,
+    totalMessages: messages,
+    activeListings: activeListings.length,
+    removedListings: listings.length - activeListings.length,
+    totalSales,
+    totalVolume,
+  };
 }

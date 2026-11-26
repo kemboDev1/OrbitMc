@@ -1,47 +1,248 @@
-import { useEffect, useState } from 'react';
-import { listAdminFeedback, listAdminProfiles, setFeedbackStatus, type AdminProfile, type FeedbackItem } from '../data/admin';
+import { useMemo, useState } from 'react';
+import type { AuraTier, DB, Hub, User } from '../data/types';
+import {
+  adminAdjustSparks,
+  adminDeleteHub,
+  adminGrantAura,
+  adminSetListingRemoved,
+  adminToggleHubPublic,
+  adminToggleListingFeatured,
+  adminToggleSuspended,
+  adminToggleUserRole,
+  getWorkspaceStats,
+  isAdminUser,
+} from '../data/admin';
+import { db as dbApi } from '../data/db';
+import { hasAura } from '../data/market';
 import { useI18n } from '../i18n';
+import { Avatar } from './Avatar';
 import { Icon } from './Icons';
+import { Modal } from './Modal';
 import { tell } from './Toast';
-import type { DB, User } from '../data/types';
-import { setHubMemberRole } from '../data/hubs';
 
-export function AdminPage({ onBack, db, user }: { onBack: () => void; db: DB; user: User }) {
+type AdminTab = 'overview' | 'users' | 'hubs' | 'shop' | 'system';
+
+export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenHub: (hub: Hub) => void }) {
   const { t, lang } = useI18n();
-  const [profiles, setProfiles] = useState<AdminProfile[]>([]);
-  const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
-  const [tab, setTab] = useState<'feedback' | 'people' | 'roles'>('feedback');
-  const [busy, setBusy] = useState(true);
-  const [filter, setFilter] = useState('');
-  const [selectedHub, setSelectedHub] = useState('');
-  const [roleBusy, setRoleBusy] = useState('');
-  const ownedHubs = Object.values(db.hubs).filter((hub) => hub.ownerId === user.id);
-  const activeHub = ownedHubs.find((hub) => hub.id === selectedHub) ?? ownedHubs[0];
-  const refresh = async () => {
-    setBusy(true);
-    try {
-      const [people, notes] = await Promise.all([listAdminProfiles(), listAdminFeedback()]);
-      setProfiles(people); setFeedback(notes);
-    } catch { tell(t('err.backendUnavailable'), 'bad'); }
-    finally { setBusy(false); }
+  const [tab, setTab] = useState<AdminTab>('overview');
+  const [query, setQuery] = useState('');
+  const [deleteHubTarget, setDeleteHubTarget] = useState<Hub | null>(null);
+
+  const stats = useMemo(() => getWorkspaceStats(db), [db]);
+  const users = useMemo(
+    () => Object.values(db.users)
+      .filter((u) => u.id !== 'orbit-studio' && !u.bot)
+      .filter((u) => `${u.name} ${u.username}`.toLowerCase().includes(query.trim().toLowerCase()))
+      .sort((a, b) => Number(!!b.isAdmin) - Number(!!a.isAdmin) || Number(b.presence === 'online') - Number(a.presence === 'online')),
+    [db.users, query],
+  );
+  const hubs = useMemo(
+    () => Object.values(db.hubs)
+      .filter((h) => `${h.name} ${h.about}`.toLowerCase().includes(query.trim().toLowerCase()))
+      .sort((a, b) => b.createdAt - a.createdAt),
+    [db.hubs, query],
+  );
+  const listings = useMemo(
+    () => Object.values(db.listings)
+      .filter((l) => `${l.name} ${l.about}`.toLowerCase().includes(query.trim().toLowerCase()))
+      .sort((a, b) => Number(!!b.featured) - Number(!!a.featured) || b.sales - a.sales),
+    [db.listings, query],
+  );
+
+  if (!isAdminUser(user)) {
+    return <div className="page-content admin-page"><div className="inline-empty"><Icon name="shield" size={28} /><p>{t('err.notMember')}</p></div></div>;
+  }
+
+  const bytes = dbApi.bytes();
+  const storageText = bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(2)} MB` : `${Math.max(1, Math.round(bytes / 1000))} KB`;
+
+  const runCheck = () => {
+    const brokenRooms = Object.values(db.hubs).filter((h) => h.rooms.length === 0).length;
+    if (brokenRooms === 0) tell(t('adminHealthOk'), 'good');
+    else tell(`${brokenRooms} hub(s) missing rooms`, 'bad');
   };
-  useEffect(() => { void refresh(); }, []);
-  const updateStatus = async (item: FeedbackItem, status: FeedbackItem['status']) => {
-    try { await setFeedbackStatus(item.id, status); setFeedback((items) => items.map((entry) => entry.id === item.id ? { ...entry, status } : entry)); }
-    catch { tell(t('err.saveFailed'), 'bad'); }
-  };
-  const filtered = profiles.filter((profile) => `${profile.username} ${profile.display_name}`.toLowerCase().includes(filter.toLowerCase()));
-  const changeRole = async (memberId: string, current: 'owner' | 'mod' | 'member') => {
-    if (!activeHub || current === 'owner' || roleBusy) return;
-    setRoleBusy(memberId);
-    try { await setHubMemberRole(activeHub.id, user.id, memberId, current === 'mod' ? 'member' : 'mod'); tell(t('roleSaved'), 'good'); }
-    catch { tell(t('err.saveFailed'), 'bad'); }
-    finally { setRoleBusy(''); }
-  };
-  return <section className="admin-page">
-    <header className="admin-heading"><div><span className="eyebrow">{t('adminEyebrow')}</span><h1>{t('adminTitle')}</h1><p>{t('adminPrivacy')}</p></div><button className="btn btn-secondary btn-small" onClick={onBack}><Icon name="back" size={14}/>{t('backToApp')}</button></header>
-    <div className="admin-metrics"><article><span>{t('adminMembers')}</span><b>{profiles.length}</b></article><article><span>{t('adminNewFeedback')}</span><b>{feedback.filter((item) => item.status === 'new').length}</b></article><article><span>{t('adminReviewed')}</span><b>{feedback.filter((item) => item.status === 'done').length}</b></article></div>
-    <div className="admin-tabs"><button className={tab === 'feedback' ? 'active' : ''} onClick={() => setTab('feedback')}>{t('feedbackInbox')}</button><button className={tab === 'people' ? 'active' : ''} onClick={() => setTab('people')}>{t('adminPeople')}</button><button className={tab === 'roles' ? 'active' : ''} onClick={() => setTab('roles')}>{t('communityRoles')}</button><button className="icon-btn" aria-label={t('refresh')} onClick={() => void refresh()}><Icon name="refresh" size={15}/></button></div>
-    {busy ? <div className="admin-loading"><span className="spinner"/>{t('loading')}</div> : tab === 'feedback' ? <div className="feedback-list">{feedback.length ? feedback.map((item) => <article className="feedback-card" key={item.id}><div className="feedback-card-head"><span className="feedback-category">{t(`feedback${item.category[0].toUpperCase()}${item.category.slice(1)}`)}</span><time>{new Intl.DateTimeFormat(lang, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.created_at))}</time></div><p>{item.body}</p><div className="feedback-card-foot"><span>@{item.username} · {item.display_name}</span><select aria-label={t('feedbackStatus')} value={item.status} onChange={(event) => void updateStatus(item, event.target.value as FeedbackItem['status'])}><option value="new">{t('feedbackNew')}</option><option value="reviewing">{t('feedbackReviewing')}</option><option value="done">{t('feedbackDone')}</option></select></div></article>) : <div className="inline-empty"><p>{t('feedbackEmpty')}</p></div>}</div> : tab === 'roles' ? <div className="admin-roles"><header><div><h2>{t('communityRoles')}</h2><p>{t('communityRolesHelp')}</p></div>{ownedHubs.length > 0 && <select className="sort-select" aria-label={t('chooseCommunity')} value={activeHub?.id ?? ''} onChange={(event) => setSelectedHub(event.target.value)}>{ownedHubs.map((hub) => <option key={hub.id} value={hub.id}>{hub.emoji} {hub.name}</option>)}</select>}</header>{!activeHub ? <div className="inline-empty"><p>{t('noOwnedCommunities')}</p></div> : <div className="admin-table">{Object.entries(activeHub.members).map(([memberId, role]) => { const member = db.users[memberId]; if (!member) return null; return <div className="admin-person admin-role-person" key={memberId}><span className="admin-person-avatar">{member.name.slice(0, 1).toUpperCase()}</span><span><b>{member.name}</b><small>@{member.username}</small></span><span className={`role-badge role-${role}`}>{t(role === 'mod' ? 'moderator' : role === 'owner' ? 'owner' : 'member')}</span>{role !== 'owner' && <button className="btn btn-outline btn-small" disabled={roleBusy === memberId} onClick={() => void changeRole(memberId, role as 'mod' | 'member')}>{t(role === 'mod' ? 'removeModerator' : 'assignModerator')}</button>}</div>; })}</div>}</div> : <div className="admin-people"><label className="market-search"><Icon name="search" size={15}/><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={t('search')}/></label><div className="admin-table">{filtered.map((person) => <div className="admin-person" key={person.id}><span className="admin-person-avatar">{person.display_name.trim().slice(0, 1).toUpperCase()}</span><span><b>{person.display_name}</b><small>@{person.username}</small></span><span className="admin-person-presence">{t(person.presence in { online: 1, idle: 1, dnd: 1, offline: 1 } ? person.presence as 'online' | 'idle' | 'dnd' | 'offline' : 'offline')}</span><time>{new Intl.DateTimeFormat(lang, { month: 'short', year: 'numeric' }).format(new Date(person.created_at))}</time></div>)}</div></div>}
-  </section>;
+
+  return <div className="page-content admin-page">
+    <div className="page-heading">
+      <div>
+        <div className="eyebrow">{t('adminEyebrow')}</div>
+        <h1>{t('adminTitle')}</h1>
+        <p>{t('adminSub')}</p>
+      </div>
+      <div className="admin-head-badge"><Icon name="shield" size={16} /><span>{user.name}</span></div>
+    </div>
+
+    <div className="admin-tabs-bar">
+      <div className="market-tabs">
+        {([
+          { id: 'overview', label: t('adminOverview') },
+          { id: 'users', label: `${t('adminUsers')} (${stats.totalUsers})` },
+          { id: 'hubs', label: `${t('adminHubs')} (${stats.totalHubs})` },
+          { id: 'shop', label: `${t('adminShop')} (${listings.length})` },
+          { id: 'system', label: t('adminSystem') },
+        ] as { id: AdminTab; label: string }[]).map((item) => (
+          <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}>{item.label}</button>
+        ))}
+      </div>
+      {tab !== 'overview' && tab !== 'system' && (
+        <label className="market-search"><Icon name="search" size={15} /><input placeholder={t('search')} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+      )}
+    </div>
+
+    {tab === 'overview' && <>
+      <div className="admin-kpi-grid">
+        <article className="admin-kpi-card"><span className="kpi-icon"><Icon name="people" size={18} /></span><b>{stats.totalUsers}</b><small>{t('adminTotalUsers')} · {stats.onlineUsers} {t('onlineNow')}</small></article>
+        <article className="admin-kpi-card"><span className="kpi-icon"><Icon name="grid" size={18} /></span><b>{stats.totalHubs}</b><small>{t('adminTotalHubs')} · {stats.totalRooms} {t('rooms').toLowerCase()}</small></article>
+        <article className="admin-kpi-card"><span className="kpi-icon"><Icon name="chat" size={18} /></span><b>{stats.totalMessages}</b><small>{t('adminTotalMessages')}</small></article>
+        <article className="admin-kpi-card"><span className="kpi-icon"><Icon name="spark" size={18} /></span><b>{stats.totalVolume.toLocaleString(lang)}</b><small>{t('adminShopVolume')} · {stats.totalSales} sales</small></article>
+      </div>
+
+      <div className="admin-overview-panels">
+        <section className="admin-panel-card">
+          <div className="admin-card-head"><h3>{t('adminUsers')}</h3><button className="text-action" onClick={() => setTab('users')}>{t('allItems')}</button></div>
+          <div className="admin-mini-list">
+            {users.slice(0, 5).map((u) => (
+              <div className="admin-mini-row" key={u.id}>
+                <Avatar user={u} size="xs" showStatus />
+                <div><b>{u.name}</b><small>@{u.username} · {u.sparks} {t('sparks')}</small></div>
+                {u.isAdmin && <span className="admin-tag">{t('admin')}</span>}
+                {hasAura(u.id) && <span className="aura-pill">{u.aura?.tier.toUpperCase()}</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="admin-panel-card">
+          <div className="admin-card-head"><h3>{t('adminShop')}</h3><button className="text-action" onClick={() => setTab('shop')}>{t('allItems')}</button></div>
+          <div className="admin-mini-list">
+            {listings.slice(0, 5).map((l) => (
+              <div className="admin-mini-row" key={l.id}>
+                <span className="admin-kind-dot">{l.kind === 'theme' ? '◐' : l.kind === 'frame' ? '◎' : '✨'}</span>
+                <div><b>{l.name}</b><small>{l.price} {t('sparks')} · {l.sales} sales</small></div>
+                {l.featured && <span className="aura-pill">{t('featuredBadge')}</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </>}
+
+    {tab === 'users' && <div className="admin-table-list">
+      {users.map((u) => {
+        const activeAura = hasAura(u.id) ? u.aura?.tier : null;
+        return (
+          <div className={`admin-row ${u.suspended ? 'is-suspended' : ''}`} key={u.id}>
+            <div className="admin-row-main">
+              <Avatar user={u} size="sm" showStatus />
+              <div className="admin-row-copy">
+                <div className="admin-row-title">
+                  <b>{u.name}</b>
+                  <small>@{u.username}</small>
+                  {u.isAdmin && <span className="admin-tag">{t('admin')}</span>}
+                  {activeAura && <span className="aura-pill">ORBIT+ {activeAura.toUpperCase()}</span>}
+                  {u.suspended && <span className="danger-pill">{t('adminSuspend')}</span>}
+                </div>
+                <small>{u.sparks.toLocaleString(lang)} {t('sparks')} · {u.inventory.length} items</small>
+              </div>
+            </div>
+            <div className="admin-row-actions">
+              <select
+                className="sort-select"
+                aria-label={t('adminGrantPlan')}
+                value={activeAura ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value as AuraTier | '';
+                  adminGrantAura(user.id, u.id, val === '' ? null : val);
+                  tell(t('presenceUpdated'), 'good');
+                }}
+              >
+                <option value="">{t('auraFree')}</option>
+                <option value="ember">{t('auraEmber')}</option>
+                <option value="flare">{t('auraFlare')}</option>
+                <option value="nova">{t('auraNova')}</option>
+              </select>
+              <button className="btn btn-outline btn-small" onClick={() => { adminAdjustSparks(user.id, u.id, 500); tell('+500', 'good'); }}>{t('adminAddSparks')}</button>
+              {u.id !== user.id && <>
+                <button className="btn btn-ghost btn-small" onClick={() => { adminToggleUserRole(user.id, u.id); tell(t('memberRoleUpdated'), 'good'); }}>{u.isAdmin ? t('adminRemoveAdmin') : t('adminMakeAdmin')}</button>
+                <button className={`btn btn-small ${u.suspended ? 'btn-outline' : 'btn-danger-outline'}`} onClick={() => { adminToggleSuspended(user.id, u.id); tell(t('presenceUpdated'), 'good'); }}>{u.suspended ? t('adminUnsuspend') : t('adminSuspend')}</button>
+              </>}
+            </div>
+          </div>
+        );
+      })}
+    </div>}
+
+    {tab === 'hubs' && <div className="admin-table-list">
+      {hubs.map((h) => (
+        <div className="admin-row" key={h.id}>
+          <div className="admin-row-main">
+            <span className="hub-side-symbol" style={{ '--hub-hue': h.hue } as React.CSSProperties}>{h.emoji}</span>
+            <div className="admin-row-copy">
+              <div className="admin-row-title"><b>{h.name}</b><span className="aura-pill">{h.public ? t('publicHub') : t('privateHub')}</span></div>
+              <small>{Object.keys(h.members).length} {t('members').toLowerCase()} · {h.rooms.length} {t('rooms').toLowerCase()} · {db.users[h.ownerId]?.name ?? 'OrbitMc'}</small>
+            </div>
+          </div>
+          <div className="admin-row-actions">
+            {h.members[user.id] && <button className="btn btn-outline btn-small" onClick={() => onOpenHub(h)}>{t('viewHub')}</button>}
+            {!h.remote && <button className="btn btn-ghost btn-small" onClick={() => { adminToggleHubPublic(user.id, h.id); tell(t('hubUpdated'), 'good'); }}>{h.public ? t('adminMakePrivate') : t('adminMakePublic')}</button>}
+            {!h.remote && <button className="btn btn-danger-outline btn-small" onClick={() => setDeleteHubTarget(h)}>{t('adminDeleteHub')}</button>}
+          </div>
+        </div>
+      ))}
+      {hubs.length === 0 && <p className="subtle-empty">{t('noPublicHubs')}</p>}
+    </div>}
+
+    {tab === 'shop' && <div className="admin-table-list">
+      {listings.map((l) => (
+        <div className={`admin-row ${l.removed ? 'is-suspended' : ''}`} key={l.id}>
+          <div className="admin-row-main">
+            <span className="admin-kind-dot">{l.kind === 'theme' ? '◐' : l.kind === 'frame' ? '◎' : '✨'}</span>
+            <div className="admin-row-copy">
+              <div className="admin-row-title">
+                <b>{l.name}</b>
+                <span className="aura-pill">{t(l.kind)}</span>
+                {l.featured && <span className="aura-pill">{t('featuredBadge')}</span>}
+                {l.removed && <span className="danger-pill">{t('removeListing')}</span>}
+              </div>
+              <small>{l.price} {t('sparks')} · {l.sales} sales · {db.users[l.sellerId]?.name ?? 'Orbit Studio'}</small>
+            </div>
+          </div>
+          <div className="admin-row-actions">
+            {!l.remote && <button className="btn btn-outline btn-small" onClick={() => { adminToggleListingFeatured(user.id, l.id); tell(t('presenceUpdated'), 'good'); }}>{l.featured ? t('adminUnfeature') : t('adminFeature')}</button>}
+            {!l.remote && <button className={`btn btn-small ${l.removed ? 'btn-primary' : 'btn-danger-outline'}`} onClick={() => { adminSetListingRemoved(user.id, l.id, !l.removed); tell(t('presenceUpdated'), 'good'); }}>{l.removed ? t('adminRestore') : t('removeListing')}</button>}
+          </div>
+        </div>
+      ))}
+    </div>}
+
+    {tab === 'system' && <div className="admin-system-grid">
+      <section className="admin-panel-card">
+        <h3>{t('storage')}</h3>
+        <p className="admin-system-stat">{storageText} / 1.8 MB</p>
+        <div className="admin-storage-bar"><span style={{ width: `${Math.min(100, Math.round((bytes / 1_800_000) * 100))}%` }} /></div>
+        <div className="admin-system-actions">
+          <button className="btn btn-primary btn-small" onClick={runCheck}><Icon name="shield" size={14} />{t('adminHealthCheck')}</button>
+          <button className="btn btn-outline btn-small" onClick={() => {
+            const blob = new Blob([dbApi.exportJSON(user)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = `orbitmc-admin-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 800);
+            tell(t('exportDone'), 'good');
+          }}><Icon name="download" size={14} />{t('exportData')}</button>
+        </div>
+      </section>
+      <section className="admin-panel-card">
+        <h3>Orbit+ &amp; Sync</h3>
+        <p>{user.serverBacked ? t('hubsLiveNotice') : t('demoModeBadge')}</p>
+        <p className="admin-sync-pill"><Icon name="check" size={14} />{t('adminHealthOk')} · {stats.auraUsers} Orbit+ active</p>
+      </section>
+    </div>}
+
+    <Modal open={!!deleteHubTarget} onClose={() => setDeleteHubTarget(null)} title={t('adminDeleteHub')} subtitle={deleteHubTarget?.name} size="sm">
+      <div className="modal-actions">
+        <button className="btn btn-secondary" onClick={() => setDeleteHubTarget(null)}>{t('cancel')}</button>
+        <button className="btn btn-danger" onClick={() => { if (deleteHubTarget) { adminDeleteHub(user.id, deleteHubTarget.id); setDeleteHubTarget(null); tell(t('hubLeft'), 'good'); } }}>{t('delete')}</button>
+      </div>
+    </Modal>
+  </div>;
 }

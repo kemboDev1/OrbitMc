@@ -5,6 +5,6 @@
     var dark = mode === 'dark' || (mode !== 'light' && !matchMedia('(prefers-color-scheme: light)').matches);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     var lang = JSON.parse(localStorage.getItem('sado:lang') || 'null');
-    if (lang === 'ru' || lang === 'en') document.documentElement.lang = lang;
+    if (lang === 'ru' || lang === 'en' || lang === 'uz') document.documentElement.lang = lang;
   } catch (e) {}
 })();

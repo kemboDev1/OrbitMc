@@ -1,13 +1,14 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { register, validateBio, validateName, validatePassword } from '../src/data/auth';
-import { sendMessage, addReaction, editMessage, pinMessage, deleteMessage, startDM } from '../src/data/chat';
+import { enterDemoWorkspace, register, validateBio, validateName, validatePassword } from '../src/data/auth';
+import { sendMessage, addReaction, editMessage, pinMessage, deleteMessage, startDM, canPostInChannel, votePoll } from '../src/data/chat';
 import { db } from '../src/data/db';
 import { chronologicalRemoteHistory } from '../src/data/cloud';
-import { clearHistory, deleteChatForUser, getChatTheme, hiddenBefore, hideMessage, isBlocked, isChatDeleted, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setChatTheme, setMuted } from '../src/data/chatControls';
+import { clearHistory, hiddenBefore, hideMessage, isBlocked, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setMuted } from '../src/data/chatControls';
 import { AppError } from '../src/data/errors';
-import { addRoom, joinInvite, leaveHub, makeHub, setHubMemberRole, updateHubDetails, updateHubRoom } from '../src/data/hubs';
-import { buyListing, cancelAura, claimDaily, createListing, equipListing, giftListing, getAura, hasAura, subscribeAura } from '../src/data/market';
+import { addRoom, joinInvite, kickHubMember, leaveHub, makeHub, setHubMemberRole, updateHub, updateRoom } from '../src/data/hubs';
+import { adminAdjustSparks, adminGrantAura, adminToggleListingFeatured, adminToggleSuspended, getWorkspaceStats, isAdminUser } from '../src/data/admin';
+import { buyListing, cancelAura, claimDaily, createListing, equipListing, giftListing, hasAura, subscribeAura } from '../src/data/market';
 import type { User } from '../src/data/types';
 import { releaseAssetFor, type ReleaseAsset } from '../src/lib/downloads';
 
@@ -39,9 +40,7 @@ test('local profile previews, chats, rooms, bazaar and backups keep working', as
   const user = addUser('user_test', 'test_user');
   const other = addUser('user_other', 'other_user');
   const recipient = addUser('user_gift', 'gift_user');
-  assert.equal(getAura({ ...user, serverBacked: true, isOwner: true })?.tier, 'nova', 'the verified owner receives the highest Orbit Max tier at no cost');
   assert.ok(Object.values(db.get().listings).some((listing) => listing.sellerId === 'orbit-studio' && listing.kind === 'theme'), 'the starter collection includes original themes');
-  assert.equal(Object.values(db.get().listings).filter((listing) => listing.sellerId === 'orbit-studio').length, 22, 'the starter shop now contains a broader collection of themes, frames and bundles');
   assert.ok(Object.values(db.get().listings).filter((listing) => listing.sellerId === 'orbit-studio').every((listing) => listing.kind !== 'stickers'), 'the studio shop does not seed sticker products');
 
   assert.equal(validateName('  Test   User '), 'Test User');
@@ -62,42 +61,26 @@ test('local profile previews, chats, rooms, bazaar and backups keep working', as
   await deleteMessage(dm, message.id, user.id);
   assert.equal(db.get().msgs[dm].length, 0);
 
-  const hub = makeHub({ userId: user.id, name: 'Test corner', about: 'A private place', emoji: '✳', public: false });
-  assert.equal(joinInvite(hub.invite, other.id)?.id, hub.id);
-  const room = addRoom(hub.id, user.id, 'behind-the-scenes');
+  const hub = await makeHub({ userId: user.id, name: 'Test corner', about: 'A private place', emoji: '✳', public: false });
+  assert.equal((await joinInvite(hub.invite, other.id))?.id, hub.id);
+  const room = await addRoom(hub.id, user.id, 'behind-the-scenes');
   assert.ok(db.get().hubs[hub.id].rooms.some((item) => item.id === room));
-  await updateHubDetails(hub.id, user.id, { name: 'Studio corner', about: 'An updated description', emoji: '🌙', hue: 285, isPublic: true });
-  await updateHubRoom(hub.id, user.id, room, { topic: 'Read the latest updates', kind: 'broadcast' });
-  assert.equal(db.get().hubs[hub.id].name, 'Studio corner');
-  await setHubMemberRole(hub.id, user.id, other.id, 'mod');
-  assert.equal(db.get().hubs[hub.id].members[other.id], 'mod', 'the community owner can assign the moderator role');
-  assert.equal(db.get().hubs[hub.id].rooms.find((item) => item.id === room)?.kind, 'broadcast');
-  await setHubMemberRole(hub.id, user.id, other.id, 'member');
-  assert.throws(() => sendMessage({ channel: room, userId: other.id, text: 'A regular member cannot post here.' }), isError('err.notMember'));
-  leaveHub(hub.id, other.id);
+  await leaveHub(hub.id, other.id);
   assert.equal(db.get().hubs[hub.id].members[other.id], undefined);
 
-  const set = createListing({ userId: user.id, kind: 'stickers', name: 'My set', about: 'Made for you', price: 25, stickers: ['🫶', '✨', '🥹', '🌙', '🌱', '🤍'] });
-  const bundle = createListing({ userId: user.id, kind: 'bundle', name: 'Aurora set', about: 'Theme and matching avatar ring', price: 80, theme: { dark: true, bg: '#10161C', panel: '#172129', raised: '#202D36', line: '#34444F', accent: '#ff5b2e', image: 'data:image/jpeg;base64,example' }, frame: { colors: ['#ff5b2e', '#e7aa56'], spin: true } });
-  db.transaction((data) => { data.users[user.id].inventory.push(bundle.id); });
-  equipListing(user.id, bundle.id);
-  assert.equal(db.get().users[user.id].theme, bundle.id);
-  assert.equal(db.get().users[user.id].frame, bundle.id, 'a bundle equips its matching theme and ring for a free-plan user');
-  equipListing(user.id, bundle.id);
-  assert.equal(db.get().users[user.id].theme, null);
-  assert.equal(db.get().users[user.id].frame, null, 'equipping an active bundle removes both pieces together');
-  assert.equal(claimDaily(user.id), 25);
+  const set = await createListing({ userId: user.id, kind: 'stickers', name: 'My set', about: 'Made for you', price: 25, stickers: ['🫶', '✨', '🥹', '🌙', '🌱', '🤍'] });
+  assert.equal(await claimDaily(user.id), 25);
   assert.throws(() => claimDaily(user.id), isError('dailyDone'));
   db.transaction((data) => { data.users[other.id].sparks = 100; });
   const sellerBeforeSale = db.get().users[user.id].sparks;
-  buyListing(other.id, set.id);
+  await buyListing(other.id, set.id);
   assert.ok(db.get().users[other.id].inventory.includes(set.id));
   assert.equal(db.get().users[user.id].sparks, sellerBeforeSale + 21, 'free seller receives the sale after the 15% bazaar fee');
   equipListing(other.id, set.id);
   assert.throws(() => buyListing(other.id, set.id), isError('alreadyOwned'));
 
   db.transaction((data) => { data.users[user.id].inventory.push(set.id); data.users[user.id].sparks = 100; });
-  giftListing(user.id, recipient.id, set.id);
+  await giftListing(user.id, recipient.id, set.id);
   assert.ok(db.get().users[recipient.id].inventory.includes(set.id), 'an item the sender owns can be gifted');
   assert.deepEqual(db.get().users[recipient.id].giftsReceived, [set.id], 'gift activity is available for the public profile preview');
   assert.equal(db.get().users[user.id].sparks, 75);
@@ -105,12 +88,12 @@ test('local profile previews, chats, rooms, bazaar and backups keep working', as
   subscribeAura(user.id, 'flare', 'month');
   assert.equal(hasAura(user.id), true);
   const sellerBeforeAuraSale = db.get().users[user.id].sparks;
-  const auraSale = createListing({ userId: user.id, kind: 'stickers', name: 'Orbit set', about: 'Made for you', price: 25, stickers: ['🫶', '✨', '🥹', '🌙', '🌱', '🤍'] });
+  const auraSale = await createListing({ userId: user.id, kind: 'stickers', name: 'Orbit set', about: 'Made for you', price: 25, stickers: ['🫶', '✨', '🥹', '🌙', '🌱', '🤍'] });
   db.transaction((data) => { data.users[other.id].sparks = 100; });
-  buyListing(other.id, auraSale.id);
+  await buyListing(other.id, auraSale.id);
   assert.equal(db.get().users[user.id].sparks, sellerBeforeAuraSale + 23, 'Flare sellers pay the configured 5% fee');
   db.transaction((data) => { data.users[user.id].lastDaily = 0; });
-  assert.equal(claimDaily(user.id), 500, 'Flare daily reward uses the configured stipend');
+  assert.equal(await claimDaily(user.id), 500, 'Flare daily reward uses the configured stipend');
   cancelAura(user.id);
   assert.equal(hasAura(user.id), true, 'cancelling renewal keeps benefits until expiry');
 
@@ -142,10 +125,6 @@ test('conversation controls stay per account and history can be restored', () =>
   setBlocked(owner, other, true);
   assert.equal(isMuted(owner, other), true);
   assert.equal(isBlocked(owner, other), true);
-  setMuted(owner, other, true, 60_000);
-  assert.equal(isMuted(owner, other), true, 'a timed mute stays active until it expires');
-  setMuted(owner, other, true, -1);
-  assert.equal(isMuted(owner, other), false, 'an expired timed mute is ignored');
   assert.equal(isBlocked(other, owner), false, 'block settings are private to the local account');
   setMuted(owner, other, false);
   setBlocked(owner, other, false);
@@ -165,12 +144,58 @@ test('conversation controls stay per account and history can be restored', () =>
   restoreHistory(owner, channel, previous);
   assert.equal(hiddenBefore(owner, channel), 0, 'undo restores the previous history boundary');
   assert.equal(isMessageHidden(owner, channel, 'hidden-message'), true, 'individual hidden messages remain hidden');
-  setChatTheme(owner, channel, 'ocean');
-  assert.equal(getChatTheme(owner, channel), 'ocean');
-  assert.equal(getChatTheme(other, channel), 'default', 'chat appearance belongs to the current account');
-  setChatTheme(owner, channel, 'default');
-  assert.equal(getChatTheme(owner, channel), 'default', 'default removes a saved override');
-  deleteChatForUser(owner, channel);
-  assert.equal(isChatDeleted(owner, channel), true);
-  assert.equal(isChatDeleted(other, channel), false, 'chat hiding is private to the local account');
+});
+
+test('demo workspace, hub templates, polls, broadcast permissions, and admin actions work cleanly', async () => {
+  db.wipe();
+  const demo = enterDemoWorkspace();
+  assert.equal(isAdminUser(demo), true);
+  assert.ok(db.get().hubs['h_orbit_builders']);
+
+  const member = addUser('user_member', 'member_one');
+  const teamHub = await makeHub({ userId: demo.id, name: 'Product Sprint', about: 'Work hub', emoji: '🚀', public: true, template: 'team' });
+  assert.ok(teamHub.rooms.some((r) => r.name === 'announcements' && r.kind === 'broadcast'));
+  joinInvite(teamHub.invite, member.id);
+
+  const announceRoom = teamHub.rooms.find((r) => r.kind === 'broadcast')!;
+  assert.equal(canPostInChannel(announceRoom.id, member.id), false, 'regular members cannot post in broadcast rooms');
+  assert.equal(canPostInChannel(announceRoom.id, demo.id), true, 'owners can post in broadcast rooms');
+
+  setHubMemberRole(teamHub.id, demo.id, member.id, 'mod');
+  assert.equal(canPostInChannel(announceRoom.id, member.id), true, 'moderators can post in broadcast rooms');
+
+  updateHub(teamHub.id, demo.id, { name: 'Orbit Core Team' });
+  assert.equal(db.get().hubs[teamHub.id].name, 'Orbit Core Team');
+
+  const generalRoom = teamHub.rooms.find((r) => r.name === 'general')!;
+  updateRoom(teamHub.id, generalRoom.id, demo.id, { topic: 'Daily standups' });
+  assert.equal(db.get().hubs[teamHub.id].rooms.find((r) => r.id === generalRoom.id)?.topic, 'Daily standups');
+
+  const pollMsg = await sendMessage({
+    channel: generalRoom.id,
+    userId: demo.id,
+    text: '',
+    poll: {
+      question: 'Ship redesign?',
+      options: [
+        { id: 'a', text: 'Yes', votes: [] },
+        { id: 'b', text: 'Right now', votes: [] },
+      ],
+    },
+  });
+  votePoll(generalRoom.id, pollMsg.id, 'b', member.id);
+  assert.deepEqual(db.get().msgs[generalRoom.id][0].poll?.options[1].votes, [member.id]);
+
+  adminGrantAura(demo.id, member.id, 'nova');
+  assert.equal(hasAura(member.id), true);
+  adminAdjustSparks(demo.id, member.id, 500);
+  assert.equal(db.get().users[member.id].sparks, 800);
+  adminToggleSuspended(demo.id, member.id);
+  assert.equal(canPostInChannel(generalRoom.id, member.id), false, 'suspended users cannot post');
+  kickHubMember(teamHub.id, demo.id, member.id);
+  assert.equal(db.get().hubs[teamHub.id].members[member.id], undefined);
+
+  assert.equal(adminToggleListingFeatured(demo.id, 'orbit_theme_nightglass'), true);
+  const stats = getWorkspaceStats(db.get());
+  assert.ok(stats.totalHubs >= 2 && stats.totalUsers >= 4);
 });

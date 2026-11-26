@@ -17,17 +17,65 @@ export const LIMITS = {
   imageChars: 320_000,
   imageCharsAura: 640_000,
   perChannel: 400,
-  listings: 10,
+  listings: 12,
   /** OWASP recommendation for PBKDF2-HMAC-SHA256. */
   pbkdf2: 600_000,
 };
 
 export const TIERS: AuraTier[] = ['ember', 'flare', 'nova'];
 
-export const AURA: Record<AuraTier, { month: number; year: number; stipend: number; daily: number; hubs: number; fee: number }> = {
-  ember: { month: 2.99, year: 29.9, stipend: 200, daily: 2, hubs: 10, fee: 0.1 },
-  flare: { month: 5.99, year: 59.9, stipend: 500, daily: 3, hubs: 25, fee: 0.05 },
-  nova: { month: 9.99, year: 99.9, stipend: 1200, daily: 4, hubs: 100, fee: 0 },
+export const AURA: Record<AuraTier, {
+  month: number;
+  year: number;
+  stipend: number;
+  daily: number;
+  hubs: number;
+  fee: number;
+  maxChars: number;
+  animatedFrames: boolean;
+  customThemes: boolean;
+  polls: boolean;
+  stickerPacks: boolean;
+}> = {
+  ember: {
+    month: 2.99,
+    year: 29.9,
+    stipend: 200,
+    daily: 2,
+    hubs: 10,
+    fee: 0.1,
+    maxChars: 2500,
+    animatedFrames: true,
+    customThemes: true,
+    polls: true,
+    stickerPacks: true,
+  },
+  flare: {
+    month: 5.99,
+    year: 59.9,
+    stipend: 500,
+    daily: 3,
+    hubs: 25,
+    fee: 0.05,
+    maxChars: 3200,
+    animatedFrames: true,
+    customThemes: true,
+    polls: true,
+    stickerPacks: true,
+  },
+  nova: {
+    month: 9.99,
+    year: 99.9,
+    stipend: 1200,
+    daily: 4,
+    hubs: 100,
+    fee: 0,
+    maxChars: 4000,
+    animatedFrames: true,
+    customThemes: true,
+    polls: true,
+    stickerPacks: true,
+  },
 };
 
 export const FREE = { hubs: 10, fee: 0.15, daily: 25, startSparks: 300 };

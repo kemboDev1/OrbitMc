@@ -28,8 +28,8 @@ export interface User {
   /** Built-in demo contact that answers on its own. */
   bot?: boolean;
   serverBacked?: boolean;
-  /** Set only after the server confirms the protected OrbitMc owner role. */
-  isOwner?: boolean;
+  isAdmin?: boolean;
+  suspended?: boolean;
   aura: AuraSub | null;
   sparks: number;
   inventory: ID[];
@@ -71,6 +71,17 @@ export interface Hub {
   remote?: true;
 }
 
+export interface PollOption {
+  id: ID;
+  text: string;
+  votes: ID[];
+}
+
+export interface PollData {
+  question: string;
+  options: PollOption[];
+}
+
 export interface Message {
   id: ID;
   ch: ID;
@@ -85,9 +96,10 @@ export interface Message {
   pinned?: boolean;
   sticker?: string;
   image?: string;
+  poll?: PollData;
 }
 
-export type ListingKind = 'stickers' | 'theme' | 'frame' | 'bundle';
+export type ListingKind = 'stickers' | 'theme' | 'frame';
 
 export interface ThemeData {
   dark: boolean;
@@ -96,8 +108,6 @@ export interface ThemeData {
   raised: string;
   line: string;
   accent: string;
-  gradient?: string;
-  image?: string;
 }
 
 export interface FrameData {
@@ -119,6 +129,7 @@ export interface Listing {
   sales: number;
   createdAt: number;
   auraOnly?: boolean;
+  featured?: boolean;
   removed?: boolean;
   stickers?: string[];
   theme?: ThemeData;
