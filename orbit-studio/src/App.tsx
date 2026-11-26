@@ -628,9 +628,10 @@ export function App() {
                     <div
                       className={`frame-ring ${motion === 'pulse' ? 'pulse' : ''}`}
                       style={{
-                        background: `linear-gradient(135deg, ${frameA}, ${frameB})`,
+                        '--frame-a': frameA,
+                        '--frame-b': frameB,
                         boxShadow: `0 0 28px ${frameA}66`,
-                      }}
+                      } as React.CSSProperties}
                     />
                     <div className="frame-avatar-core">O</div>
                   </div>
