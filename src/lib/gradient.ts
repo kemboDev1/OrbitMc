@@ -19,7 +19,7 @@ export function frameSpeedDuration(speed?: MotionSpeed): string {
 
 export function frameMotionClass(frame?: FrameData | null): string {
   if (!frame) return '';
-  const motion = frame.motion ?? (frame.spin ? 'pulse' : 'none');
+  const motion = frame.motion ?? (frame.spin ? 'spin' : 'none');
   if (motion === 'spin') return 'avatar-frame-spin';
   if (motion === 'shimmer') return 'avatar-frame-shimmer';
   if (motion === 'pulse') return 'avatar-frame-pulse';
