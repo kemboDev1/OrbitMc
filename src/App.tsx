@@ -227,11 +227,12 @@ export default function App() {
           <div className="loader-orbit">
             <span className="loader-ring ring-a" />
             <span className="loader-ring ring-b" />
+            <span className="loader-orbit-dot" />
             <BrandMark large />
           </div>
           <strong>ORBITMC</strong>
           <p>{t('loading')}</p>
-          <div className="loader-bar"><i /></div>
+          <div className="loader-bar"><span /></div>
         </div>
       </main>
     );

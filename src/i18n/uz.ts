@@ -230,6 +230,10 @@ const uz: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [
   voiceMessage: 'Ovozli xabar',
   youtubeAttach: 'YouTube video ulashish',
   youtubePrompt: 'YouTube video havolasini kiriting',
+  gradientTypeLabel: 'Gradient turi',
+  gradientAngleLabel: 'Gradient burilishi (gradus)',
+  frameMotionLabel: 'Animatsiya usuli',
+  motionSpeedLabel: 'Animatsiya tezligi',
 };
 
 export default uz;

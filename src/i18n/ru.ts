@@ -231,6 +231,10 @@ const ru: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [
   voiceMessage: 'Голосовое сообщение',
   youtubeAttach: 'Видео с YouTube',
   youtubePrompt: 'Вставьте ссылку на YouTube',
+  gradientTypeLabel: 'Тип градиента',
+  gradientAngleLabel: 'Угол поворота градиента',
+  frameMotionLabel: 'Режим анимации',
+  motionSpeedLabel: 'Скорость анимации',
 };
 
 export default ru;

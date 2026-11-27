@@ -5,7 +5,7 @@ import { computeOrbitXP, hasAura } from '../data/market';
 import { fetchPublicProfileDetails } from '../data/cloud';
 import { useI18n } from '../i18n';
 import { Avatar } from './Avatar';
-import { bannerStyleFor } from './SettingsPage';
+import { bannerMotionClassFor, bannerStyleFor } from './SettingsPage';
 import { VectorBadge, VerifiedBadge } from './VectorAssets';
 
 function isBirthdayToday(birthday?: string): boolean {
@@ -66,7 +66,7 @@ export function ProfileExplorerContent({
 
   return (
     <div className={`${variant === 'drawer' ? 'profile-aside-card' : 'profile-modal-card'} tpl-${target.profileTemplate ?? 'halo'}`}>
-      <div className={variant === 'drawer' ? 'profile-cover' : 'profile-modal-cover'} style={bannerStyleFor(target)} />
+      <div className={`${variant === 'drawer' ? 'profile-cover' : 'profile-modal-cover'} ${bannerMotionClassFor(target)}`} style={bannerStyleFor(target)} />
       <Avatar user={target} size={variant === 'drawer' ? 'lg' : 'xl'} showStatus />
       {variant === 'drawer' && <span className="member-presence">{t(target.presence)}</span>}
 

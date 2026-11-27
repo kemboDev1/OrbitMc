@@ -167,6 +167,10 @@ export async function removeRemoteListing(userId: string, listingId: string): Pr
 
 function toUser(row: ProfileRow, previous?: User): User {
   const saved = getCosmetics(row.id);
+  const rawStroke = row.profile_stroke ?? undefined;
+  const effectiveStroke = rawStroke && (rawStroke.toLowerCase() !== '#ff5b2e' || saved?.profileStrokeCustom === true)
+    ? rawStroke
+    : (saved?.profileStrokeCustom ? saved?.profileStroke : undefined);
   return {
     ...previous,
     id: row.id,
@@ -176,7 +180,7 @@ function toUser(row: ProfileRow, previous?: User): User {
     hue: row.hue,
     avatar: row.avatar ?? undefined,
     banner: row.banner ?? previous?.banner ?? saved?.banner,
-    profileStroke: row.profile_stroke ?? previous?.profileStroke ?? saved?.profileStroke,
+    profileStroke: effectiveStroke,
     profileTags: row.profile_tags ?? previous?.profileTags ?? saved?.profileTags,
     profileTemplate: row.profile_template ?? previous?.profileTemplate ?? saved?.profileTemplate,
     hideGiftSenders: row.hide_gift_senders ?? previous?.hideGiftSenders ?? saved?.hideGiftSenders,
@@ -487,6 +491,22 @@ export async function syncRemoteWorkspace(userId: string): Promise<void> {
   if (profilesResult.error || messagesResult.error || blocksResult.error && !blockTableMissing(blocksResult.error)) throw new AppError('err.backendUnavailable');
 
   const remoteUsers = (profilesResult.data as ProfileRow[]).map((row) => toUser(row, db.get().users[row.id]));
+  const dedupedRemote = new Map<string, User>();
+  const seenUsernames = new Map<string, string>();
+  for (const candidate of remoteUsers) {
+    const uname = candidate.username.toLowerCase();
+    const existingId = seenUsernames.get(uname);
+    if (existingId && existingId !== candidate.id) {
+      if (candidate.id === userId) {
+        dedupedRemote.delete(existingId);
+        seenUsernames.set(uname, candidate.id);
+        dedupedRemote.set(candidate.id, candidate);
+      }
+      continue;
+    }
+    seenUsernames.set(uname, candidate.id);
+    dedupedRemote.set(candidate.id, candidate);
+  }
   const messages = chronologicalRemoteHistory(messagesResult.data as DirectMessageRow[]);
   const remoteChannels = new Set(messages.map((message) => message.ch));
   const groupedMessages = messages.reduce<Record<string, Message[]>>((groups, message) => {
@@ -495,10 +515,11 @@ export async function syncRemoteWorkspace(userId: string): Promise<void> {
   }, {});
 
   db.transaction((data) => {
-    const localOnlyUsers = Object.fromEntries(
-      Object.entries(data.users).filter(([, user]) => !user.serverBacked && !user.bot),
-    );
-    data.users = { ...localOnlyUsers, ...Object.fromEntries(remoteUsers.map((user) => [user.id, user])) };
+    const studioUser = data.users['orbit-studio'];
+    data.users = {
+      ...(studioUser ? { 'orbit-studio': studioUser } : {}),
+      ...Object.fromEntries(dedupedRemote.entries()),
+    };
 
     for (const channel of Object.keys(data.msgs)) {
       if (channel.startsWith('dm:')) delete data.msgs[channel];

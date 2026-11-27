@@ -1,35 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#171926"/>
-      <stop offset="100%" stop-color="#0b0c12"/>
+    <linearGradient id="bg" x1="4" y1="2" x2="60" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1b2136"/>
+      <stop offset="55%" stop-color="#111524"/>
+      <stop offset="100%" stop-color="#090b12"/>
     </linearGradient>
-    <linearGradient id="orbit" x1="8" y1="50" x2="56" y2="14" gradientUnits="userSpaceOnUse">
+    <linearGradient id="portal" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ff6838"/>
+      <stop offset="55%" stop-color="#ff9a52"/>
+      <stop offset="100%" stop-color="#947dff"/>
+    </linearGradient>
+    <linearGradient id="arc" x1="6" y1="46" x2="58" y2="18" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="#ff5b2e"/>
-      <stop offset="55%" stop-color="#ff944d"/>
-      <stop offset="100%" stop-color="#8f7dff"/>
-    </linearGradient>
-    <linearGradient id="core" x1="20" y1="18" x2="44" y2="46" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#ff7847"/>
-      <stop offset="100%" stop-color="#ff4924"/>
+      <stop offset="50%" stop-color="#ffbe6b"/>
+      <stop offset="100%" stop-color="#56ccf2"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
-  <rect x="1.25" y="1.25" width="61.5" height="61.5" rx="14.75" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1.5"/>
-  <!-- Back half of orbital ring -->
-  <g transform="rotate(-26 32 32)">
-    <path d="M 8 32 A 24 10.5 0 0 1 56 32" fill="none" stroke="url(#orbit)" stroke-width="4.2" stroke-linecap="round" opacity="0.48"/>
+  <rect width="64" height="64" rx="17" fill="url(#bg)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="15.5" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1.5"/>
+  <g transform="rotate(-24 32 32)">
+    <path d="M 9 32 A 23 9.5 0 0 1 55 32" stroke="url(#arc)" stroke-width="3.6" stroke-linecap="round" opacity="0.4"/>
   </g>
-  <!-- Planet speech-orb core -->
-  <path d="M 32 18 C 40.284 18 47 24.268 47 32 C 47 39.732 40.284 46 32 46 C 29.52 46 27.18 45.43 25.12 44.43 L 18.8 46.4 L 20.65 40.55 C 18.38 38.24 17 35.26 17 32 C 17 24.268 23.716 18 32 18 Z" fill="url(#core)"/>
-  <!-- Inner signal dots -->
-  <circle cx="26.5" cy="32" r="2.2" fill="#fff7f2"/>
-  <circle cx="32.5" cy="32" r="2.2" fill="#fff7f2"/>
-  <circle cx="38.5" cy="32" r="2.2" fill="#fff7f2"/>
-  <!-- Front half of orbital ring -->
-  <g transform="rotate(-26 32 32)">
-    <path d="M 56 32 A 24 10.5 0 0 1 8 32" fill="none" stroke="url(#orbit)" stroke-width="4.5" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="14.5" stroke="url(#portal)" stroke-width="5.2"/>
+  <path d="M 32 23.5 C 32.9 28.4 35.6 31.1 40.5 32 C 35.6 32.9 32.9 35.6 32 40.5 C 31.1 35.6 28.4 32.9 23.5 32 C 28.4 31.1 31.1 28.4 32 23.5 Z" fill="#fff7ef"/>
+  <g transform="rotate(-24 32 32)">
+    <path d="M 55 32 A 23 9.5 0 0 1 9 32" stroke="url(#arc)" stroke-width="4" stroke-linecap="round"/>
   </g>
-  <!-- Orbiting satellite node -->
-  <circle cx="49" cy="18.5" r="4.2" fill="#8f7dff" stroke="#0f1018" stroke-width="2"/>
+  <circle cx="51" cy="19" r="4.3" fill="#56ccf2" stroke="#0c0f1a" stroke-width="2"/>
 </svg>

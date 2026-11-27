@@ -15,6 +15,7 @@ export interface UserCosmetics {
   messageEffect?: 'none' | 'glow' | 'aurora' | 'ember';
   banner?: string;
   profileStroke?: string;
+  profileStrokeCustom?: boolean;
   profileTags?: string[];
   profileTemplate?: 'clean' | 'halo' | 'frame';
   birthday?: string;

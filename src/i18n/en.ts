@@ -229,6 +229,10 @@ const en = {
   voiceMessage: 'Voice message',
   youtubeAttach: 'Share YouTube link',
   youtubePrompt: 'Paste YouTube video link',
+  gradientTypeLabel: 'Gradient style',
+  gradientAngleLabel: 'Rotate gradient angle',
+  frameMotionLabel: 'Animation mode',
+  motionSpeedLabel: 'Animation speed',
 } as const;
 
 export default en;

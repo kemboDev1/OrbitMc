@@ -1,5 +1,4 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { Loader2 } from 'lucide-react';
 import { passwordScore } from '../lib/crypto';
 import { enterDemoWorkspace, register, resetPassword, signIn } from '../data/auth';
 import { AppError } from '../data/errors';
@@ -176,7 +175,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
               <button className={`btn btn-primary auth-submit ${busy ? 'is-loading' : ''}`} type="submit" disabled={busy}>
                 {busy ? (
                   <span className="auth-loading-row">
-                    <Loader2 size={17} className="spin-icon" />
+                    <span className="auth-spinner-ring" aria-hidden="true" />
                     <span>{t('loading')}</span>
                   </span>
                 ) : (

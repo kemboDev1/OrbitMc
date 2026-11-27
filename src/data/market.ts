@@ -68,16 +68,24 @@ export function equipListing(userId: string, listingId: string): void {
     if (item.kind === 'stickers') user.stickerPack = user.stickerPack === listingId ? null : listingId;
     if (item.kind === 'frame') {
       if (item.auraOnly && !getAura(user)) throw new AppError('auraLimit');
-      user.frame = user.frame === listingId ? null : listingId;
+      const nextFrame = user.frame === listingId ? null : listingId;
+      user.frame = nextFrame;
+      if (!user.banner || user.banner.startsWith('grad:') || user.banner.startsWith('frame:')) {
+        user.banner = nextFrame ? `frame:${nextFrame}` : 'grad:cosmic';
+      }
     }
     if (item.kind === 'bundle') {
       const togglingOff = user.theme === listingId && user.frame === listingId;
       user.theme = togglingOff ? null : listingId;
       user.frame = togglingOff ? null : listingId;
+      if (!user.banner || user.banner.startsWith('grad:') || user.banner.startsWith('frame:')) {
+        user.banner = togglingOff ? 'grad:cosmic' : `frame:${listingId}`;
+      }
     }
     saveCosmetics(userId, {
       theme: user.theme,
       frame: user.frame,
+      banner: user.banner,
       stickerPack: user.stickerPack ?? null,
     });
   });

@@ -11,7 +11,7 @@ import { Modal } from './Modal';
 import { tell } from './Toast';
 import { AppError } from '../data/errors';
 import { LIMITS } from '../config';
-import { HUB_ICON_OPTIONS, HubSymbol } from './VectorAssets';
+import { HUB_ICON_OPTIONS, HubSymbol, VerifiedBadge } from './VectorAssets';
 
 export function HubPage({ db, user, onOpen, onCreate }: { db: DB; user: User; onOpen: (hub: Hub, room?: string) => void; onCreate: () => void }) {
   const { t, lang } = useI18n();
@@ -268,7 +268,7 @@ export function PeoplePage({ db, user, onChat }: { db: DB; user: User; onChat: (
           <button type="button" className="person-card-profile-hit" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: p.id }))} title={t('profile')}>
             <Avatar user={p} size="lg" showStatus />
             <div className="person-card-info">
-              <h3>{p.name}{hasAura(p.id) && <span className="verified-badge" title={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })} aria-label={t('profilePlanLabel', { plan: p.aura?.tier.toUpperCase() ?? 'ORBIT+' })}><Icon name="check" size={10} /></span>}<span className="pill-mini">Lv.{xp.level}</span></h3>
+              <h3>{p.name}<VerifiedBadge user={p} size={14} /><span className="pill-mini">Lv.{xp.level}</span></h3>
               <small>@{p.username} · {t('orbitXp')} {xp.xp}</small>
               <p>{p.statusText || p.bio || t('welcomeSub')}</p>
             </div>

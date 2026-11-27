@@ -1,5 +1,6 @@
 import { Crown, Sparkles } from 'lucide-react';
 import { hueOf, initials } from '../lib/util';
+import { buildGradientCss, frameMotionClass, frameSpeedDuration } from '../lib/gradient';
 import { db } from '../data/db';
 import { hasAura } from '../data/market';
 import type { User } from '../data/types';
@@ -9,12 +10,21 @@ export function Avatar({ user, size = 'md', showStatus = false }: { user?: User 
   const color = user.accent ?? `hsl(${user.hue || hueOf(user.username)} 46% 44%)`;
   const frame = user.frame ? db.get().listings[user.frame]?.frame : undefined;
   const isMax = hasAura(user.id) && user.aura?.tier === 'nova';
+  const motionClass = frameMotionClass(frame);
+  const hasCustomStroke = !frame && !!user.profileStroke;
   const avatarStyle = {
-    ...(frame ? { '--frame-a': frame.colors[0], '--frame-b': frame.colors[1] ?? frame.colors[0] } : {}),
-    ...(user.profileStroke ? { '--profile-stroke': user.profileStroke } : {}),
+    ...(frame
+      ? {
+        '--frame-a': frame.colors[0],
+        '--frame-b': frame.colors[1] ?? frame.colors[0],
+        '--frame-grad': buildGradientCss(frame),
+        '--frame-speed': frameSpeedDuration(frame.speed),
+      }
+      : {}),
+    ...(hasCustomStroke ? { '--profile-stroke': user.profileStroke } : {}),
   } as React.CSSProperties;
   return (
-    <span className={`avatar-wrap avatar-wrap-${size} ${user.profileStroke ? 'avatar-has-stroke' : ''} ${frame ? 'avatar-framed' : ''} ${frame?.spin ? 'avatar-frame-pulse' : ''}`} style={avatarStyle}>
+    <span className={`avatar-wrap avatar-wrap-${size} ${hasCustomStroke ? 'avatar-has-stroke' : ''} ${frame ? 'avatar-framed' : ''} ${motionClass}`} style={avatarStyle}>
       <span className={`avatar avatar-${size}`} style={{ backgroundColor: user.avatar ? undefined : color }}>
         {user.avatar ? <img src={user.avatar} alt="" loading="lazy" decoding="async" /> : initials(user.name)}
       </span>

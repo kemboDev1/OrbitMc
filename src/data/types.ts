@@ -130,9 +130,17 @@ export interface ThemeData {
   accent: string;
 }
 
+export type GradientStyle = 'linear' | 'conic' | 'radial';
+export type FrameMotion = 'none' | 'spin' | 'pulse' | 'shimmer';
+export type MotionSpeed = 'slow' | 'normal' | 'fast';
+
 export interface FrameData {
   colors: string[];
   spin: boolean;
+  angle?: number;
+  style?: GradientStyle;
+  motion?: FrameMotion;
+  speed?: MotionSpeed;
 }
 
 export interface Listing {

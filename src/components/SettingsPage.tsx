@@ -15,16 +15,28 @@ import { installApp, installPrompt, isStandalone } from '../lib/pwa';
 import { isDesktop } from '../lib/electron';
 import { askNotify } from '../lib/notify';
 import { ACCENTS, BANNER_GRADIENTS, CHAT_FONTS, LIMITS, MESSAGE_EFFECTS } from '../config';
+import { buildGradientCss, frameMotionClass, frameSpeedDuration } from '../lib/gradient';
 import { fmtDate } from '../lib/util';
 import { Avatar } from './Avatar';
 import { BrandMark } from './BrandMark';
 import { Icon } from './Icons';
 import { Modal } from './Modal';
 import { tell } from './Toast';
+import { VerifiedBadge } from './VectorAssets';
 import { AppError } from '../data/errors';
 
 export function bannerStyleFor(user: User, overrideBanner?: string): React.CSSProperties {
   const b = overrideBanner !== undefined ? overrideBanner : user.banner;
+  if (b && b.startsWith('frame:')) {
+    const frame = db.get().listings[b.slice(6)]?.frame;
+    if (frame) {
+      return {
+        backgroundImage: buildGradientCss(frame),
+        backgroundSize: frame.motion === 'shimmer' ? '220% 220%' : undefined,
+        '--frame-speed': frameSpeedDuration(frame.speed),
+      } as React.CSSProperties;
+    }
+  }
   if (b && b.startsWith('grad:')) {
     const found = BANNER_GRADIENTS.find((g) => g.id === b);
     if (found) return { background: found.css };
@@ -32,7 +44,25 @@ export function bannerStyleFor(user: User, overrideBanner?: string): React.CSSPr
   if (b && b.startsWith('data:image/')) {
     return { backgroundImage: `url(${b})`, backgroundSize: 'cover', backgroundPosition: 'center' };
   }
+  if (user.frame) {
+    const frame = db.get().listings[user.frame]?.frame;
+    if (frame) {
+      return {
+        backgroundImage: buildGradientCss(frame),
+        backgroundSize: frame.motion === 'shimmer' ? '220% 220%' : undefined,
+        '--frame-speed': frameSpeedDuration(frame.speed),
+      } as React.CSSProperties;
+    }
+  }
   return { '--cover-hue': user.hue } as React.CSSProperties;
+}
+
+export function bannerMotionClassFor(user: User, overrideBanner?: string): string {
+  const b = overrideBanner !== undefined ? overrideBanner : user.banner;
+  const frameId = b?.startsWith('frame:') ? b.slice(6) : user.frame;
+  const frame = frameId ? db.get().listings[frameId]?.frame : undefined;
+  const motion = frameMotionClass(frame);
+  return motion ? `banner-animated ${motion}` : '';
 }
 
 export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
@@ -181,12 +211,13 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
           <div className="settings-section-head"><span className="section-index">01</span><div><h2>{t('profile')}</h2><p>{t('editProfile')}</p></div></div>
 
           <div className={`profile-showcase-banner tpl-${profileTemplate}`}>
-            <div className="profile-showcase-cover" style={bannerStyleFor(user, banner)} />
+            <div className={`profile-showcase-cover ${bannerMotionClassFor(user, banner)}`} style={bannerStyleFor(user, banner)} />
             <div className="profile-showcase-body">
               <Avatar user={{ ...user, name, avatar: avatar || undefined, profileStroke: profileStroke || undefined }} size="xl" showStatus />
               <div className="profile-showcase-meta">
                 <div className="profile-showcase-title">
                   <strong className={`font-${chatFont}`}>{name || user.name}</strong>
+                  <VerifiedBadge user={user} size={14} />
                   {isPro && <span className={`pro-flex-pill tier-${user.aura?.tier ?? 'ember'}`}>{user.aura?.tier === 'nova' ? <Crown size={11} /> : <Sparkles size={11} />}{user.aura?.tier === 'nova' ? 'NOVA MAX' : `ORBIT+ ${user.aura?.tier.toUpperCase()}`}</span>}
                   {adminOn && <span className="admin-tag">{t('admin')}</span>}
                 </div>
@@ -215,6 +246,11 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
                   {BANNER_GRADIENTS.map((g) => (
                     <button key={g.id} type="button" className={`banner-grad-chip ${banner === g.id ? 'selected' : ''}`} style={{ background: g.css }} onClick={() => setBanner(g.id)} title={g.label}><span>{g.label}</span></button>
                   ))}
+                  {Object.values(data.listings)
+                    .filter((l) => !l.removed && l.frame && (user.inventory.includes(l.id) || l.sellerId === user.id))
+                    .map((l) => (
+                      <button key={l.id} type="button" className={`banner-grad-chip ${banner === `frame:${l.id}` ? 'selected' : ''}`} style={{ background: buildGradientCss(l.frame) }} onClick={() => setBanner(`frame:${l.id}`)} title={l.name}><span>{l.name}</span></button>
+                    ))}
                   <input type="file" accept="image/jpeg,image/png,image/webp" hidden ref={bannerRef} onChange={chooseBanner} />
                   <button type="button" className="btn btn-outline btn-small" onClick={() => bannerRef.current?.click()}><Icon name="image" size={14} />{t('profileBannerUpload')}</button>
                 </div>

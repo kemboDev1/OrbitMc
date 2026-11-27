@@ -6,6 +6,7 @@ import { buyListing, claimDaily, createListing, equipListing, getAura, giftListi
 import { useI18n } from '../i18n';
 import { AppError } from '../data/errors';
 import { AURA, LIMITS, STUDIO_URL } from '../config';
+import { buildGradientCss, frameMotionClass, frameSpeedDuration, GRADIENT_PRESETS } from '../lib/gradient';
 import { Avatar } from './Avatar';
 import { Icon } from './Icons';
 import { Modal } from './Modal';
@@ -151,13 +152,13 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
           ) : l.kind === 'bundle' ? (
             <div className="bundle-preview">
               {l.theme && <div className="theme-preview bundle-theme" style={{ '--preview-bg': l.theme.bg, '--preview-panel': l.theme.panel, '--preview-raised': l.theme.raised, '--preview-line': l.theme.line, '--preview-accent': l.theme.accent } as React.CSSProperties}><span className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></span></div>}
-              {l.frame && <div className="frame-preview-clean bundle-frame"><span className={`frame-halo-ring ${l.frame.spin ? 'pulse' : ''}`} style={{ '--frame-a': l.frame.colors[0], '--frame-b': l.frame.colors[1] ?? l.frame.colors[0] } as React.CSSProperties} /><span className="frame-face-clean">{user.name.slice(0, 1).toUpperCase()}</span></div>}
+              {l.frame && <div className="frame-preview-clean bundle-frame"><span className={`frame-halo-ring ${frameMotionClass(l.frame)}`} style={{ '--frame-a': l.frame.colors[0], '--frame-b': l.frame.colors[1] ?? l.frame.colors[0], '--frame-grad': buildGradientCss(l.frame), '--frame-speed': frameSpeedDuration(l.frame.speed) } as React.CSSProperties} /><span className="frame-face-clean">{user.name.slice(0, 1).toUpperCase()}</span></div>}
             </div>
           ) : l.kind === 'theme' ? (
             <div className="theme-preview" style={{ '--preview-bg': l.theme?.bg, '--preview-panel': l.theme?.panel, '--preview-raised': l.theme?.raised, '--preview-line': l.theme?.line, '--preview-accent': l.theme?.accent } as React.CSSProperties}><span className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></span><span className="theme-name-preview">{listingName}</span></div>
           ) : (
             <div className="frame-preview-clean">
-              <span className={`frame-halo-ring ${l.frame?.spin ? 'pulse' : ''}`} style={{ '--frame-a': l.frame?.colors[0], '--frame-b': l.frame?.colors[1] ?? l.frame?.colors[0] } as React.CSSProperties} />
+              <span className={`frame-halo-ring ${frameMotionClass(l.frame)}`} style={{ '--frame-a': l.frame?.colors[0], '--frame-b': l.frame?.colors[1] ?? l.frame?.colors[0], '--frame-grad': buildGradientCss(l.frame), '--frame-speed': frameSpeedDuration(l.frame?.speed) } as React.CSSProperties} />
               <span className="frame-face-clean" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : undefined }}>{user.avatar ? '' : user.name.slice(0, 1).toUpperCase()}</span>
             </div>
           )}
@@ -172,7 +173,7 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
           <div className="product-actions">
             {isOwned ? <button className={`btn ${isInUse ? 'btn-secondary' : 'btn-outline'} btn-small`} onClick={() => useItem(l)}>{isInUse ? t('equipped') : t('equip')}</button> : <button className="btn btn-primary btn-small" onClick={() => buy(l)}><Icon name="spark" size={14} />{l.price} {t('sparks')}</button>}
             <button type="button" className={`icon-btn fav-action ${favIds.includes(l.id) ? 'is-fav' : ''}`} title={t('favorites')} aria-label={t('favorites')} onClick={() => toggleFavoriteListing(user.id, l.id)}><Heart size={15} fill={favIds.includes(l.id) ? 'currentColor' : 'none'} /></button>
-            {l.sellerId !== user.id && <button className="icon-btn gift-action" title={t('sendGift')} aria-label={t('sendGift')} onClick={() => setGiftItem(l)}><Icon name="gift" size={15} /></button>}
+            <button type="button" className="icon-btn gift-action" title={t('sendGift')} aria-label={t('sendGift')} onClick={() => setGiftItem(l)}><Icon name="gift" size={15} /></button>
             {l.sellerId === user.id && <button className="icon-btn danger-ghost" title={t('removeListing')} aria-label={t('removeListing')} onClick={() => remove(l)}><Icon name="trash" size={14} /></button>}
           </div>
         </div>
@@ -200,11 +201,27 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
   const [lineColor, setLineColor] = useState('#2a314c');
   const [accent, setAccent] = useState('#8f7dff');
   const [secondColor, setSecondColor] = useState('#ff5b2e');
-  const [spinFrame, setSpinFrame] = useState(false);
+  const [thirdColor, setThirdColor] = useState('#3aa8ff');
+  const [useThirdColor, setUseThirdColor] = useState(false);
+  const [gradientAngle, setGradientAngle] = useState(135);
+  const [gradientStyle, setGradientStyle] = useState<'linear' | 'conic' | 'radial'>('linear');
+  const [frameMotion, setFrameMotion] = useState<'none' | 'spin' | 'pulse' | 'shimmer'>('pulse');
+  const [motionSpeed, setMotionSpeed] = useState<'slow' | 'normal' | 'fast'>('normal');
   const [auraExclusive, setAuraExclusive] = useState(false);
   const [stickers, setStickers] = useState<string[]>(VECTOR_BADGES.slice(0, 6).map((b) => b.id));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const frameColors = useThirdColor ? [accent, secondColor, thirdColor] : [accent, secondColor];
+  const spinFrame = frameMotion !== 'none';
+  const draftFrame = {
+    colors: frameColors,
+    spin: spinFrame,
+    angle: gradientAngle,
+    style: gradientStyle,
+    motion: frameMotion,
+    speed: motionSpeed,
+  };
 
   const applyPreset = (preset: typeof themePresets[number]) => {
     setDarkTheme(preset.dark);
@@ -229,7 +246,7 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
     setBusy(true);
     try {
       const theme = kind === 'theme' ? { dark: darkTheme, bg: bgColor, panel: panelColor, raised: raisedColor, line: lineColor, accent } : undefined;
-      const frame = kind === 'frame' ? { colors: [accent, secondColor], spin: spinFrame } : undefined;
+      const frame = kind === 'frame' ? draftFrame : undefined;
       await createListing({
         userId: user.id,
         kind,
@@ -300,10 +317,69 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
     </div>}
 
     {kind === 'frame' && <>
-      <div className="field-label">{t('frameSecondColor')}
-        <div className="color-swatches">{hues.map((h) => <button type="button" key={h} title={h} aria-label={`${t('frameSecondColor')} ${h}`} aria-pressed={secondColor === h} className={secondColor === h ? 'selected' : ''} style={{ '--swatch': h } as React.CSSProperties} onClick={() => setSecondColor(h)} />)}</div>
+      <div className="field-label">{t('creatorPreset')}
+        <div className="preset-row">
+          {GRADIENT_PRESETS.map((p) => (
+            <button key={p.name} type="button" className="preset-chip" onClick={() => {
+              setAccent(p.colors[0]);
+              setSecondColor(p.colors[1]);
+              if (p.colors[2]) { setThirdColor(p.colors[2]); setUseThirdColor(true); } else setUseThirdColor(false);
+              setGradientAngle(p.angle);
+              setGradientStyle(p.style);
+              setFrameMotion(p.motion);
+            }}>
+              <span className="preset-dot" style={{ background: `linear-gradient(135deg, ${p.colors.join(', ')})` }} />{p.name}
+            </button>
+          ))}
+        </div>
       </div>
-      <label className="creator-motion"><input type="checkbox" checked={spinFrame} onChange={(event) => setSpinFrame(event.target.checked)} />{t('frameMotion')} { !hasAura(user.id) && <span className="pill-mini">ORBIT+</span> }</label>
+
+      <div className="custom-color-grid">
+        <label className="color-pick-tile"><input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} /><span>Color 1</span></label>
+        <label className="color-pick-tile"><input type="color" value={secondColor} onChange={(e) => setSecondColor(e.target.value)} /><span>Color 2</span></label>
+        {useThirdColor ? (
+          <label className="color-pick-tile"><input type="color" value={thirdColor} onChange={(e) => setThirdColor(e.target.value)} /><span>Color 3</span></label>
+        ) : (
+          <button type="button" className="color-pick-tile add-stop-btn" onClick={() => setUseThirdColor(true)}>+ Color 3</button>
+        )}
+        {useThirdColor && (
+          <button type="button" className="color-pick-tile" onClick={() => setUseThirdColor(false)}>2 Stops</button>
+        )}
+      </div>
+
+      <div className="field-label">{t('gradientTypeLabel')}
+        <div className="segmented-choice">
+          {(['linear', 'conic', 'radial'] as const).map((st) => (
+            <button key={st} type="button" className={gradientStyle === st ? 'selected' : ''} onClick={() => setGradientStyle(st)}>{st.toUpperCase()}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="field-label">
+        <span className="range-head"><span>{t('gradientAngleLabel')}</span><b>{gradientAngle}°</b></span>
+        <div className="angle-control-row">
+          <input type="range" min={0} max={360} step={5} value={gradientAngle} onChange={(e) => setGradientAngle(Number(e.target.value))} />
+          <button type="button" className="btn btn-outline btn-small" onClick={() => setGradientAngle((a) => (a + 45) % 360)}>+45°</button>
+        </div>
+      </div>
+
+      <div className="field-label">{t('frameMotionLabel')}
+        <div className="segmented-choice">
+          {(['none', 'pulse', 'spin', 'shimmer'] as const).map((m) => (
+            <button key={m} type="button" className={frameMotion === m ? 'selected' : ''} onClick={() => setFrameMotion(m)}>{m.toUpperCase()}</button>
+          ))}
+        </div>
+      </div>
+
+      {frameMotion !== 'none' && (
+        <div className="field-label">{t('motionSpeedLabel')}
+          <div className="segmented-choice">
+            {(['slow', 'normal', 'fast'] as const).map((sp) => (
+              <button key={sp} type="button" className={motionSpeed === sp ? 'selected' : ''} onClick={() => setMotionSpeed(sp)}>{sp.toUpperCase()}</button>
+            ))}
+          </div>
+        </div>
+      )}
     </>}
 
     {kind === 'stickers' && <div className="field-label">{t('addStickers')} ({stickers.length}/12)
@@ -323,7 +399,10 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
         {kind === 'theme' ? (
           <div className="theme-preview" style={themePreviewStyle}><div className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></div><span className="theme-name-preview">{name.trim() || t('creatorTheme')}</span></div>
         ) : kind === 'frame' ? (
-          <div className="frame-preview-clean"><span className={`frame-halo-ring ${spinFrame ? 'pulse' : ''}`} style={{ '--frame-a': accent, '--frame-b': secondColor } as React.CSSProperties} /><span className="frame-face-clean" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : undefined }}>{user.avatar ? '' : user.name.slice(0, 1).toUpperCase()}</span></div>
+          <div className="creator-frame-banner-preview">
+            <div className={`creator-mini-banner banner-animated ${frameMotionClass(draftFrame)}`} style={{ backgroundImage: buildGradientCss(draftFrame), backgroundSize: frameMotion === 'shimmer' ? '220% 220%' : undefined, '--frame-speed': frameSpeedDuration(motionSpeed) } as React.CSSProperties} />
+            <div className="frame-preview-clean"><span className={`frame-halo-ring ${frameMotionClass(draftFrame)}`} style={{ '--frame-a': accent, '--frame-b': secondColor, '--frame-grad': buildGradientCss(draftFrame), '--frame-speed': frameSpeedDuration(motionSpeed) } as React.CSSProperties} /><span className="frame-face-clean" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : undefined }}>{user.avatar ? '' : user.name.slice(0, 1).toUpperCase()}</span></div>
+          </div>
         ) : (
           <div className="sticker-preview vector-pack-preview">{stickers.slice(0, 6).map((x, i) => <span className={`sticker-pos sticker-pos-${i + 1}`} key={`${x}${i}`}><VectorBadge id={x} size="md" /></span>)}</div>
         )}

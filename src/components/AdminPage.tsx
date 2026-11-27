@@ -21,6 +21,7 @@ import { Avatar } from './Avatar';
 import { Icon } from './Icons';
 import { Modal } from './Modal';
 import { tell } from './Toast';
+import { VerifiedBadge } from './VectorAssets';
 
 type AdminTab = 'overview' | 'users' | 'hubs' | 'shop' | 'system';
 
@@ -140,9 +141,10 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
               <Avatar user={u} size="sm" showStatus />
               <div className="admin-row-copy">
                 <div className="admin-row-title">
-                  <b>{u.name}</b>
+                  <b>{u.name}<VerifiedBadge user={u} size={13} /></b>
                   <small>@{u.username}</small>
                   {u.isAdmin && <span className="admin-tag">{t('admin')}</span>}
+                  {!u.isAdmin && u.role === 'mod' && <span className="role-chip mod">{t('roleMod')}</span>}
                   {activeAura && <span className="aura-pill">ORBIT+ {activeAura.toUpperCase()}</span>}
                   {u.suspended && <span className="danger-pill">{t('adminSuspend')}</span>}
                 </div>

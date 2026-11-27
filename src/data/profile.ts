@@ -26,7 +26,7 @@ export async function updateProfile(userId: string, input: {
   if (input.avatar !== undefined && input.avatar !== null && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.avatar) || input.avatar.length > LIMITS.imageChars)) {
     throw new AppError('err.imgBig');
   }
-  if (input.banner !== undefined && input.banner !== null && !input.banner.startsWith('grad:') && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.banner) || input.banner.length > LIMITS.imageChars)) throw new AppError('err.imgBig');
+  if (input.banner !== undefined && input.banner !== null && !input.banner.startsWith('grad:') && !input.banner.startsWith('frame:') && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.banner) || input.banner.length > LIMITS.imageChars)) throw new AppError('err.imgBig');
   if (input.profileStroke !== undefined && input.profileStroke !== null && !/^#[0-9a-f]{6}$/i.test(input.profileStroke)) throw new AppError('err.badText');
   const tags = (input.profileTags ?? currentUser?.profileTags ?? []).map((tag) => tag.trim().replace(/\s+/g, ' ')).filter(Boolean);
   if (tags.length > 5 || tags.some((tag) => tag.length > 20 || !/^[\p{L}\p{N} _-]+$/u.test(tag))) throw new AppError('err.badText');
@@ -35,14 +35,14 @@ export async function updateProfile(userId: string, input: {
   if (currentUser.serverBacked) {
     saveCosmetics(userId, {
       ...(input.banner !== undefined ? { banner: input.banner ?? undefined } : {}),
-      ...(input.profileStroke !== undefined ? { profileStroke: input.profileStroke ?? undefined } : {}),
+      ...(input.profileStroke !== undefined ? { profileStroke: input.profileStroke ?? undefined, profileStrokeCustom: !!input.profileStroke } : {}),
       ...(input.profileTags !== undefined ? { profileTags: tags } : {}),
       ...(input.profileTemplate !== undefined ? { profileTemplate: input.profileTemplate } : {}),
       ...(input.birthday !== undefined ? { birthday: input.birthday || undefined } : {}),
       ...(input.birthdayVisible !== undefined ? { birthdayVisible: input.birthdayVisible } : {}),
       ...(input.hideGiftSenders !== undefined ? { hideGiftSenders: input.hideGiftSenders } : {}),
     });
-    const remoteBanner = input.banner && input.banner.startsWith('grad:') ? undefined : input.banner;
+    const remoteBanner = input.banner && (input.banner.startsWith('grad:') || input.banner.startsWith('frame:')) ? undefined : input.banner;
     await updateRemoteProfile(userId, {
       name,
       bio,
