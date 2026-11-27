@@ -15,6 +15,7 @@ import {
   isAdminUser,
 } from '../data/admin';
 import { db as dbApi } from '../data/db';
+import { resetContactState } from '../data/chatControls';
 import { hasAura } from '../data/market';
 import { useI18n } from '../i18n';
 import { Avatar } from './Avatar';
@@ -294,8 +295,9 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
         <button className="btn btn-secondary" onClick={() => setDeleteUserTarget(null)}>{t('cancel')}</button>
         <button className="btn btn-danger" onClick={() => {
           if (!deleteUserTarget) return;
-          void Promise.resolve(adminDeleteUser(user.id, deleteUserTarget.id))
-            .then(() => { setDeleteUserTarget(null); tell(t('presenceUpdated'), 'good'); })
+          const deletedId = deleteUserTarget.id;
+          void Promise.resolve(adminDeleteUser(user.id, deletedId))
+            .then(() => { resetContactState(user.id, deletedId); setDeleteUserTarget(null); tell(t('contactNameReset'), 'good'); })
             .catch(() => tell(t('err.generic'), 'bad'));
         }}>{t('delete')}</button>
       </div>

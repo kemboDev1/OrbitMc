@@ -4,7 +4,7 @@ import { enterDemoWorkspace, register, validateBio, validateName, validatePasswo
 import { sendMessage, addReaction, editMessage, pinMessage, deleteMessage, startDM, canPostInChannel, votePoll } from '../src/data/chat';
 import { db } from '../src/data/db';
 import { chronologicalRemoteHistory } from '../src/data/cloud';
-import { clearHistory, deleteConversation, getMuteUntil, hiddenBefore, hideMessage, isBlocked, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setMuted, setMutedFor } from '../src/data/chatControls';
+import { clearHistory, deleteConversation, getDisplayName, getMuteUntil, hiddenBefore, hideMessage, isBlocked, isMessageHidden, isMuted, replaceRemoteBlocks, restoreHistory, setBlocked, setCustomNickname, setMuted, setMutedFor } from '../src/data/chatControls';
 import { AppError } from '../src/data/errors';
 import { addRoom, joinInvite, kickHubMember, leaveHub, makeHub, setHubMemberRole, updateHub, updateRoom } from '../src/data/hubs';
 import { adminAdjustSparks, adminGrantAura, adminToggleListingFeatured, adminToggleSuspended, getWorkspaceStats, isAdminUser } from '../src/data/admin';
@@ -210,6 +210,10 @@ test('demo workspace, hub templates, polls, broadcast permissions, and admin act
   assert.equal(isMuted(demo.id, member.id), true);
   assert.ok(getMuteUntil(demo.id, member.id) > Date.now());
   const dmId = startDM(demo.id, member.id);
+  setCustomNickname(demo.id, member.id, 'My Bestie');
+  assert.equal(getDisplayName(demo.id, member), 'My Bestie');
   deleteConversation(demo.id, dmId);
   assert.equal((db.get().dms[demo.id] ?? []).includes(dmId), false);
+  assert.equal(getDisplayName(demo.id, member), member.name, 'custom display name resets when conversation is deleted');
+  assert.equal(isMuted(demo.id, member.id), false, 'mute state resets when conversation is deleted');
 });

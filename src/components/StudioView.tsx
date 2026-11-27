@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Crown, Lock, Orbit, Palette, RotateCw, Sparkles, UploadCloud } from 'lucide-react';
 import type { DB, FrameMotion, GradientStyle, ListingKind, MotionSpeed, User } from '../data/types';
 import { createListing, hasAura } from '../data/market';
-import { buildGradientCss, frameMotionClass, frameSpeedDuration, GRADIENT_PRESETS } from '../lib/gradient';
+import { buildBannerFlowCss, buildGradientCss, frameMotionClass, frameSpeedDuration, GRADIENT_PRESETS } from '../lib/gradient';
 import { useI18n } from '../i18n';
 import { tell } from './Toast';
 import { AppError } from '../data/errors';
@@ -237,7 +237,7 @@ export function StudioView({ user, db, onBackToShop }: { user: User; db: DB; onB
                 </div>
               ) : kind === 'frame' ? (
                 <div className="creator-frame-banner-preview">
-                  <div className={`creator-mini-banner banner-animated ${frameMotionClass(frameDraft)}`} style={{ backgroundImage: buildGradientCss(frameDraft), backgroundSize: motion === 'shimmer' ? '220% 220%' : undefined, '--frame-speed': frameSpeedDuration(speed) } as React.CSSProperties} />
+                  <div className={`creator-mini-banner banner-animated ${frameMotionClass(frameDraft)}`} style={{ backgroundImage: buildBannerFlowCss(frameDraft), backgroundSize: motion !== 'none' ? '200% 100%' : undefined, '--frame-speed': frameSpeedDuration(speed) } as React.CSSProperties} />
                   <div className="frame-preview-clean">
                     <span className={`frame-halo-ring ${frameMotionClass(frameDraft)}`} style={{ '--frame-a': frameA, '--frame-b': frameB, '--frame-grad': buildGradientCss(frameDraft), '--frame-speed': frameSpeedDuration(speed) } as React.CSSProperties} />
                     <span className="frame-face-clean">{user.name.slice(0, 1).toUpperCase()}</span>

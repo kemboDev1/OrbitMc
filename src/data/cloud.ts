@@ -724,15 +724,16 @@ export async function insertRemoteMessage(input: {
 }): Promise<Message> {
   const recipientId = remoteConversation(input.channel, input.userId);
   const client = requireSupabase();
-  const { data, error } = await client.from('direct_messages').insert({
+  const rowPayload: Record<string, unknown> = {
     sender_id: input.userId,
     recipient_id: recipientId,
     body: input.text,
     image: input.image ?? null,
-    audio: input.audio ?? null,
     sticker: input.sticker ?? null,
     reply_to: input.reply ?? null,
-  }).select('*').single();
+  };
+  if (input.audio) rowPayload.audio = input.audio;
+  const { data, error } = await client.from('direct_messages').insert(rowPayload).select('*').single();
   if (error) throw new AppError(error.code === '42501' ? 'err.messageRestricted' : 'err.messageSendFailed');
   const message = toMessage(data as DirectMessageRow);
   db.transaction((state) => {
@@ -746,13 +747,14 @@ export async function insertRemoteMessage(input: {
   return message;
 }
 
-export async function insertRemoteHubMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string }): Promise<Message> {
+export async function insertRemoteHubMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string; audio?: string }): Promise<Message> {
   const hub = Object.values(db.get().hubs).find((item) => item.remote && item.members[input.userId] && item.rooms.some((room) => room.id === input.channel));
   if (!hub) throw new AppError('err.notMember');
   const client = requireSupabase();
   const { data, error } = await client.rpc('send_hub_message', {
     target_room_id: input.channel, message_body: input.text, message_image: input.image ?? null,
     message_sticker: input.sticker ?? null, reply_id: input.reply ?? null,
+    message_audio: input.audio ?? null,
   });
   if (error || !data) throw mapHubError(error, error?.code === '42501' ? 'err.notMember' : 'err.messageSendFailed');
   const message = toHubMessage(data as HubMessageRow);

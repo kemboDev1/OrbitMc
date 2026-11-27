@@ -15,7 +15,7 @@ import { installApp, installPrompt, isStandalone } from '../lib/pwa';
 import { isDesktop } from '../lib/electron';
 import { askNotify } from '../lib/notify';
 import { ACCENTS, BANNER_GRADIENTS, CHAT_FONTS, LIMITS, MESSAGE_EFFECTS } from '../config';
-import { buildGradientCss, frameMotionClass, frameSpeedDuration } from '../lib/gradient';
+import { buildBannerFlowCss, buildGradientCss, frameMotionClass, frameSpeedDuration } from '../lib/gradient';
 import { fmtDate } from '../lib/util';
 import { Avatar } from './Avatar';
 import { BrandMark } from './BrandMark';
@@ -30,9 +30,10 @@ export function bannerStyleFor(user: User, overrideBanner?: string): React.CSSPr
   if (b && b.startsWith('frame:')) {
     const frame = db.get().listings[b.slice(6)]?.frame;
     if (frame) {
+      const animated = (frame.motion ?? (frame.spin ? 'spin' : 'none')) !== 'none';
       return {
-        backgroundImage: buildGradientCss(frame),
-        backgroundSize: frame.motion === 'shimmer' ? '220% 220%' : undefined,
+        backgroundImage: buildBannerFlowCss(frame),
+        backgroundSize: animated ? '200% 100%' : undefined,
         '--frame-speed': frameSpeedDuration(frame.speed),
       } as React.CSSProperties;
     }
@@ -47,9 +48,10 @@ export function bannerStyleFor(user: User, overrideBanner?: string): React.CSSPr
   if (user.frame) {
     const frame = db.get().listings[user.frame]?.frame;
     if (frame) {
+      const animated = (frame.motion ?? (frame.spin ? 'spin' : 'none')) !== 'none';
       return {
-        backgroundImage: buildGradientCss(frame),
-        backgroundSize: frame.motion === 'shimmer' ? '220% 220%' : undefined,
+        backgroundImage: buildBannerFlowCss(frame),
+        backgroundSize: animated ? '200% 100%' : undefined,
         '--frame-speed': frameSpeedDuration(frame.speed),
       } as React.CSSProperties;
     }
@@ -213,7 +215,7 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
           <div className={`profile-showcase-banner tpl-${profileTemplate}`}>
             <div className={`profile-showcase-cover ${bannerMotionClassFor(user, banner)}`} style={bannerStyleFor(user, banner)} />
             <div className="profile-showcase-body">
-              <Avatar user={{ ...user, name, avatar: avatar || undefined, profileStroke: profileStroke || undefined }} size="xl" showStatus />
+              <Avatar user={{ ...user, name, avatar: avatar || undefined, profileStroke: profileStroke || undefined, frame: banner.startsWith('frame:') ? banner.slice(6) : user.frame }} size="xl" showStatus />
               <div className="profile-showcase-meta">
                 <div className="profile-showcase-title">
                   <strong className={`font-${chatFont}`}>{name || user.name}</strong>

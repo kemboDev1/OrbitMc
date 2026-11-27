@@ -6,7 +6,7 @@ import { buyListing, claimDaily, createListing, equipListing, getAura, giftListi
 import { useI18n } from '../i18n';
 import { AppError } from '../data/errors';
 import { AURA, LIMITS, STUDIO_URL } from '../config';
-import { buildGradientCss, frameMotionClass, frameSpeedDuration, GRADIENT_PRESETS } from '../lib/gradient';
+import { buildBannerFlowCss, buildGradientCss, frameMotionClass, frameSpeedDuration, GRADIENT_PRESETS } from '../lib/gradient';
 import { Avatar } from './Avatar';
 import { Icon } from './Icons';
 import { Modal } from './Modal';
@@ -400,7 +400,7 @@ function CreatorModal({ open, onClose, user }: { open: boolean; onClose: () => v
           <div className="theme-preview" style={themePreviewStyle}><div className="preview-window"><i /><i /><i /><b /><em /><em /><strong /></div><span className="theme-name-preview">{name.trim() || t('creatorTheme')}</span></div>
         ) : kind === 'frame' ? (
           <div className="creator-frame-banner-preview">
-            <div className={`creator-mini-banner banner-animated ${frameMotionClass(draftFrame)}`} style={{ backgroundImage: buildGradientCss(draftFrame), backgroundSize: frameMotion === 'shimmer' ? '220% 220%' : undefined, '--frame-speed': frameSpeedDuration(motionSpeed) } as React.CSSProperties} />
+            <div className={`creator-mini-banner banner-animated ${frameMotionClass(draftFrame)}`} style={{ backgroundImage: buildBannerFlowCss(draftFrame), backgroundSize: frameMotion !== 'none' ? '200% 100%' : undefined, '--frame-speed': frameSpeedDuration(motionSpeed) } as React.CSSProperties} />
             <div className="frame-preview-clean"><span className={`frame-halo-ring ${frameMotionClass(draftFrame)}`} style={{ '--frame-a': accent, '--frame-b': secondColor, '--frame-grad': buildGradientCss(draftFrame), '--frame-speed': frameSpeedDuration(motionSpeed) } as React.CSSProperties} /><span className="frame-face-clean" style={{ backgroundImage: user.avatar ? `url(${user.avatar})` : undefined }}>{user.avatar ? '' : user.name.slice(0, 1).toUpperCase()}</span></div>
           </div>
         ) : (

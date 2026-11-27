@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Cake, Calendar, Crown, EyeOff, Gift, HelpCircle, Sparkles, Tag, Trophy } from 'lucide-react';
+import { Cake, Calendar, Check, Crown, Edit3, EyeOff, Gift, HelpCircle, RotateCcw, Sparkles, Tag, Trophy } from 'lucide-react';
 import type { DB, GiftRecord, User } from '../data/types';
 import { computeOrbitXP, hasAura } from '../data/market';
 import { fetchPublicProfileDetails } from '../data/cloud';
+import { setCustomNickname, useChatControls } from '../data/chatControls';
 import { useI18n } from '../i18n';
 import { Avatar } from './Avatar';
 import { bannerMotionClassFor, bannerStyleFor } from './SettingsPage';
+import { tell } from './Toast';
 import { VectorBadge, VerifiedBadge } from './VectorAssets';
 
 function isBirthdayToday(birthday?: string): boolean {
@@ -37,6 +39,16 @@ export function ProfileExplorerContent({
   const { t, lang } = useI18n();
   const [, setTick] = useState(0);
   const [xpGuideOpen, setXpGuideOpen] = useState(false);
+  const controls = useChatControls(viewer.id);
+  const isSelf = target.id === viewer.id;
+  const customNick = !isSelf ? controls.nicknames?.[target.id] : undefined;
+  const [editingNick, setEditingNick] = useState(false);
+  const [nickDraft, setNickDraft] = useState('');
+
+  useEffect(() => {
+    setEditingNick(false);
+    setNickDraft(customNick ?? '');
+  }, [target.id, customNick]);
 
   useEffect(() => {
     if (!target.serverBacked) return;
@@ -49,7 +61,6 @@ export function ProfileExplorerContent({
 
   const targetPro = hasAura(target.id);
   const xpInfo = computeOrbitXP(target);
-  const isSelf = target.id === viewer.id;
   const showBirthday = !!target.birthday && (isSelf || target.birthdayVisible !== false);
   const bdayToday = showBirthday && isBirthdayToday(target.birthday);
   const sharedHubs = Object.values(db.hubs).filter((h) => !!h.members[target.id]).length;
@@ -71,8 +82,19 @@ export function ProfileExplorerContent({
       {variant === 'drawer' && <span className="member-presence">{t(target.presence)}</span>}
 
       <h2 className={targetPro && target.chatFont ? `font-${target.chatFont}` : ''}>
-        {target.name}
+        {customNick || target.name}
         <VerifiedBadge user={target} />
+        {!isSelf && !target.bot && (
+          <button
+            type="button"
+            className="nick-edit-inline"
+            title={t('editContactName')}
+            aria-label={t('editContactName')}
+            onClick={() => { setNickDraft(customNick ?? target.name); setEditingNick((v) => !v); }}
+          >
+            <Edit3 size={12} />
+          </button>
+        )}
         {targetPro && (
           <span className={`pro-flex-pill tier-${target.aura?.tier ?? 'ember'}`}>
             {target.aura?.tier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}
@@ -81,7 +103,40 @@ export function ProfileExplorerContent({
         )}
       </h2>
 
-      <p className="profile-handle">@{target.username}</p>
+      {editingNick && !isSelf && !target.bot && (
+        <form
+          className="nick-inline-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setCustomNickname(viewer.id, target.id, nickDraft);
+            setEditingNick(false);
+            tell(t('contactNameSaved'), 'good');
+          }}
+        >
+          <input
+            className="field-input"
+            value={nickDraft}
+            maxLength={32}
+            placeholder={t('contactNamePlaceholder')}
+            autoFocus
+            onChange={(e) => setNickDraft(e.target.value)}
+          />
+          <button type="submit" className="icon-btn btn-primary" title={t('save')} aria-label={t('save')}><Check size={14} /></button>
+          {customNick && (
+            <button
+              type="button"
+              className="icon-btn"
+              title={t('resetContactName')}
+              aria-label={t('resetContactName')}
+              onClick={() => { setCustomNickname(viewer.id, target.id, ''); setEditingNick(false); tell(t('contactNameSaved'), 'good'); }}
+            >
+              <RotateCcw size={13} />
+            </button>
+          )}
+        </form>
+      )}
+
+      <p className="profile-handle">@{target.username}{customNick ? ` · ${target.name}` : ''}</p>
       {target.bio && <p className="profile-bio-text">{target.bio}</p>}
       {target.statusText && <p className="profile-status">“{target.statusText}”</p>}
 

@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { Check, Copy, Link2, Sparkles, User as UserIcon } from 'lucide-react';
 import type { DB, Hub, Role, User } from '../data/types';
 import { HUB_TEMPLATES, addRoom, joinHub, kickHubMember, makeHub, removeRoom, setHubMemberRole, updateHub, updateRoom, type HubTemplateKey } from '../data/hubs';
+import { useChatControls } from '../data/chatControls';
 import { computeOrbitXP, hasAura } from '../data/market';
 import { fmtShort } from '../lib/util';
 import { useI18n } from '../i18n';
@@ -257,18 +258,20 @@ export function HubSettingsModal({ open, onClose, hub, db, user }: { open: boole
 
 export function PeoplePage({ db, user, onChat }: { db: DB; user: User; onChat: (id: string) => void }) {
   const { t } = useI18n();
+  const chatControls = useChatControls(user.id);
   const [q, setQ] = useState('');
-  const others = useMemo(() => Object.values(db.users).filter((p) => (p.serverBacked || (!p.bot && p.id !== 'orbit-studio')) && p.id !== user.id && `${p.name} ${p.username}`.toLowerCase().includes(q.toLowerCase())), [db.users, user.id, q]);
+  const others = useMemo(() => Object.values(db.users).filter((p) => (p.serverBacked || (!p.bot && p.id !== 'orbit-studio')) && p.id !== user.id && `${p.name} ${chatControls.nicknames?.[p.id] ?? ''} ${p.username}`.toLowerCase().includes(q.toLowerCase())), [db.users, user.id, q, chatControls.nicknames]);
   return <div className="page-content people-page">
     <div className="page-heading"><div><div className="eyebrow">{t('goodPeople')}</div><h1>{t('people')}</h1><p>{t('welcomeSub')}</p></div><label className="page-search"><Icon name="search" size={17} /><input placeholder={t('search')} value={q} onChange={(e) => setQ(e.target.value)} /></label></div>
     {others.length ? <div className="people-list">{others.map((p) => {
       const xp = computeOrbitXP(p);
+      const displayName = chatControls.nicknames?.[p.id] || p.name;
       return (
         <div key={p.id} className="person-card">
           <button type="button" className="person-card-profile-hit" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: p.id }))} title={t('profile')}>
             <Avatar user={p} size="lg" showStatus />
             <div className="person-card-info">
-              <h3>{p.name}<VerifiedBadge user={p} size={14} /><span className="pill-mini">Lv.{xp.level}</span></h3>
+              <h3>{displayName}<VerifiedBadge user={p} size={14} /><span className="pill-mini">Lv.{xp.level}</span></h3>
               <small>@{p.username} · {t('orbitXp')} {xp.xp}</small>
               <p>{p.statusText || p.bio || t('welcomeSub')}</p>
             </div>

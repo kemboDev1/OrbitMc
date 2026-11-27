@@ -18,7 +18,7 @@ import { ProfileExplorerContent } from './ProfileExplorer';
 import { tell, tellUndo } from './Toast';
 import { AppError } from '../data/errors';
 import { AURA, LIMITS } from '../config';
-import { clearHistory, deleteConversation, getMuteUntil, hiddenBefore, hideMessage, isMessageHidden, restoreHistory, setMutedFor, useChatControls } from '../data/chatControls';
+import { clearHistory, deleteConversation, getMuteUntil, hiddenBefore, hideMessage, isMessageHidden, restoreHistory, setCustomNickname, setMutedFor, useChatControls } from '../data/chatControls';
 import { HubSymbol, VECTOR_BADGES, VectorBadge, VerifiedBadge } from './VectorAssets';
 
 const quickEmoji = ['🫶', '😂', '✨', '🤍', '👀', '🔥', '🎧', '🙌', '🥳', '💎', '⚡', '🚀', '🎨', '💬', '👏', '💙', '🌙', '☕'];
@@ -62,6 +62,8 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const [recordSecs, setRecordSecs] = useState(0);
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [editNameOpen, setEditNameOpen] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState('');
   const recorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordTimerRef = useRef<number | null>(null);
@@ -88,7 +90,8 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const remoteDM = !!dm && dm[0] !== dm[1] && dm.every((id) => data.users[id]?.serverBacked);
   const remoteHub = !!activeHub?.remote;
   const remoteHistory = remoteDM || remoteHub;
-  const channelTitle = dm ? (otherId === user.id ? t('saved') : other.name) : activeRoom?.name ?? t('chat');
+  const nameOf = (p?: { id: string; name: string } | null) => p ? (p.id === user.id ? p.name : (chatControls.nicknames?.[p.id] || p.name)) : '';
+  const channelTitle = dm ? (otherId === user.id ? t('saved') : nameOf(other)) : activeRoom?.name ?? t('chat');
   const subtitle = dm ? (otherId === user.id ? t('savedDM') : other.statusText || (other.presence === 'online' ? t('onlineNow') : t(other.presence))) : `${activeHub?.name ?? ''}${activeRoom?.topic ? ` · ${activeRoom.topic}` : ''}`;
   const activeAura = getAura(user);
   const maxChars = activeAura ? AURA[activeAura.tier].maxChars : LIMITS.message;
@@ -355,7 +358,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       ?? Object.values(data.hubs).find((h) => !!h.members[user.id])?.rooms[0]?.id
       ?? '';
     setChannel(nextChannel);
-    tell(t('chatDeleted'), 'good');
+    tell(t('contactNameReset'), 'good');
   };
 
   const confirmBlockChange = async () => {
@@ -424,6 +427,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
               </>
             )}
             <span className="menu-divider" />
+            <button onClick={() => { setConversationMenuOpen(false); setNicknameDraft(chatControls.nicknames?.[otherId] ?? other.name); setEditNameOpen(true); }}><Icon name="edit" size={15} />{t('editContactName')}</button>
             <button onClick={() => { setConversationMenuOpen(false); setConfirmClear(true); }}><Icon name="trash" size={15} />{t('clearHistory')}</button>
             <button className="danger-action" onClick={() => { setConversationMenuOpen(false); setConfirmDeleteChat(true); }}><Icon name="trash" size={15} />{t('deleteChat')}</button>
             <button className="danger-action" onClick={() => { setConversationMenuOpen(false); setConfirmBlock(true); }}><Icon name={blockedConversation ? 'check' : 'lock'} size={15} />{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button>
@@ -439,9 +443,9 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
         <div className="conversation-intro">
           {dm && <button type="button" className="intro-avatar" aria-label={t('profile')} title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: other.id }))}><Avatar user={other} size="xl" showStatus /></button>}
           {!dm && <div className="intro-hub-mark" style={{ '--hub-hue': activeHub?.hue ?? 30 } as React.CSSProperties}><HubSymbol mark={activeHub?.emoji ?? 'icon:orbit'} size={22} /></div>}
-          <h2>{dm ? (otherId === user.id ? t('saved') : other.name) : activeHub?.name}</h2>
+          <h2>{dm ? (otherId === user.id ? t('saved') : nameOf(other)) : activeHub?.name}</h2>
           <p>{dm ? (other.bio || (otherId === user.id ? t('savedDM') : t('welcomeSub'))) : (activeRoom?.topic || activeHub?.about || t('quietSub'))}</p>
-          {dm && <span className="member-since">@{other.username} · {other.presence === 'online' ? t('online') : t(other.presence)}</span>}
+          {dm && <span className="member-since">@{other.username}{chatControls.nicknames?.[other.id] ? ` · ${other.name}` : ''} · {other.presence === 'online' ? t('online') : t(other.presence)}</span>}
           {!dm && activeHub && <span className="member-since">{people.length} {t('members').toLowerCase()} · #{activeRoom?.name}</span>}
         </div>
 
@@ -463,13 +467,13 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
             {grouped && <time className="group-time" title={fmtTime(msg.ts, lang)}>{fmtTime(msg.ts, lang)}</time>}
             <div className="message-main">
               {!grouped && <div className="message-byline">
-                <button className={`message-name ${fontClass}`} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{person.name}</button>
+                <button className={`message-name ${fontClass}`} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{nameOf(person)}</button>
                 <VerifiedBadge user={person} size={13} />
                 {senderPro && <span className={`pro-flex-pill tier-${senderTier ?? 'ember'}`}>{senderTier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}{senderTier === 'nova' ? 'MAX' : 'PRO'}</span>}
                 <time>{fmtTime(msg.ts, lang)}</time>
                 {isMine && <span className="message-mine-tag">{t('you')}</span>}
               </div>}
-              {replyMessage && <button className="reply-preview" onClick={() => jumpTo(replyMessage.id)}><Icon name="reply" size={12} /><span>{t('replyBadge')} {data.users[replyMessage.by]?.name ?? t('you')}:</span><em>{replyMessage.text || replyMessage.sticker || replyMessage.poll?.question || '📷'}</em></button>}
+              {replyMessage && <button className="reply-preview" onClick={() => jumpTo(replyMessage.id)}><Icon name="reply" size={12} /><span>{t('replyBadge')} {nameOf(data.users[replyMessage.by]) || t('you')}:</span><em>{replyMessage.text || replyMessage.sticker || replyMessage.poll?.question || '📷'}</em></button>}
               {editId === msg.id ? <form className="edit-message" onSubmit={(e) => { e.preventDefault(); editSave(msg); }}><input ref={editRef} value={editText} maxLength={maxChars} onChange={(e) => setEditText(e.target.value)} /><div><button type="button" className="text-action" onClick={() => setEditId(null)}>{t('cancel')}</button><button type="submit" className="btn btn-primary btn-small">{t('save')}</button></div></form> : <>
                 {msg.text && <div className={`message-text ${fontClass} ${effectClass}`}>{renderRichText(msg.text)}{msg.edited && <span className="edited-label"> · {t('edit').toLowerCase()}</span>}</div>}
                 {msg.text && extractYouTubeIds(msg.text).map((ytId) => <YouTubeEmbedCard key={ytId} videoId={ytId} />)}
@@ -503,7 +507,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       </div>
 
       {newMessageCount > 0 && <button type="button" className="new-messages-jump" onClick={() => { const el = scrollRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); nearBottomRef.current = true; setNewMessageCount(0); }}><Icon name="down" size={15} />{t('newMessagesCount', { count: newMessageCount })}</button>}
-      {reply && !blockedConversation && <div className="replying-bar"><Icon name="reply" size={14} /><span>{t('replyBadge')} <b>{data.users[replyTargetMsg?.by ?? '']?.name ?? t('you')}</b></span><em>{replyTargetMsg?.text || replyTargetMsg?.sticker || replyTargetMsg?.poll?.question || '📷'}</em><button className="icon-btn" aria-label={t('cancel')} onClick={() => setReply(undefined)}><Icon name="close" size={13} /></button></div>}
+      {reply && !blockedConversation && <div className="replying-bar"><Icon name="reply" size={14} /><span>{t('replyBadge')} <b>{nameOf(data.users[replyTargetMsg?.by ?? '']) || t('you')}</b></span><em>{replyTargetMsg?.text || replyTargetMsg?.sticker || replyTargetMsg?.poll?.question || '📷'}</em><button className="icon-btn" aria-label={t('cancel')} onClick={() => setReply(undefined)}><Icon name="close" size={13} /></button></div>}
 
       <form className="composer-wrap" onSubmit={submit}>
         {emojiOpen && (
@@ -626,5 +630,19 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
     <Modal open={leaveOpen} onClose={() => setLeaveOpen(false)} title={t('leaveConfirm')} subtitle={t('leaveHubSub')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setLeaveOpen(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={() => void confirmLeaveHub()}>{t('leaveHub')}</button></div></Modal>
     <Modal open={newRoomOpen} onClose={() => setNewRoomOpen(false)} title={t('addRoom')} subtitle={t('newRoom')} size="sm"><form className="stack-form" onSubmit={createRoom}><label className="field-label">{t('newRoom')}<span className="input-prefix-wrap"><span className="input-prefix">#</span><input autoFocus className="field-input prefix-field" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="behind-the-scenes" maxLength={24} /></span></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setNewRoomOpen(false)}>{t('cancel')}</button><button className="btn btn-primary">{t('create')}</button></div></form></Modal>
     <Modal open={youtubeOpen} onClose={() => setYoutubeOpen(false)} title={t('youtubeAttach')} subtitle={t('youtubePrompt')} size="sm"><form className="stack-form" onSubmit={sendYouTube}><label className="field-label">YouTube URL<input autoFocus className="field-input" value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." /></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setYoutubeOpen(false)}>{t('cancel')}</button><button type="submit" className="btn btn-primary">{t('send')}</button></div></form></Modal>
+    <Modal open={editNameOpen} onClose={() => setEditNameOpen(false)} title={t('editContactName')} subtitle={`@${other.username} · ${other.name}`} size="sm">
+      <form className="stack-form" onSubmit={(e) => { e.preventDefault(); setCustomNickname(user.id, otherId, nicknameDraft); setEditNameOpen(false); tell(t('contactNameSaved'), 'good'); }}>
+        <label className="field-label">{t('displayName')}
+          <input autoFocus className="field-input" value={nicknameDraft} maxLength={32} placeholder={t('contactNamePlaceholder')} onChange={(e) => setNicknameDraft(e.target.value)} />
+        </label>
+        <div className="modal-actions">
+          {chatControls.nicknames?.[otherId] && (
+            <button type="button" className="btn btn-ghost" onClick={() => { setCustomNickname(user.id, otherId, ''); setEditNameOpen(false); tell(t('contactNameSaved'), 'good'); }}>{t('resetContactName')}</button>
+          )}
+          <button type="button" className="btn btn-secondary" onClick={() => setEditNameOpen(false)}>{t('cancel')}</button>
+          <button type="submit" className="btn btn-primary">{t('save')}</button>
+        </div>
+      </form>
+    </Modal>
   </div>;
 }
