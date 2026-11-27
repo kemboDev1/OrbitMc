@@ -3,10 +3,16 @@ import type { FrameData, MotionSpeed } from '../data/types';
 export function buildGradientCss(frame?: FrameData | null): string {
   if (!frame || !frame.colors.length) return 'linear-gradient(135deg, #ff5b2e, #8f7dff)';
   const stops = frame.colors.length === 1 ? [frame.colors[0], frame.colors[0]] : frame.colors;
-  const joined = stops.join(', ');
+  const motion = frame.motion ?? (frame.spin ? 'spin' : 'none');
   const angle = typeof frame.angle === 'number' && Number.isFinite(frame.angle) ? Math.round(frame.angle) : 135;
   const style = frame.style ?? 'linear';
-  if (style === 'conic') return `conic-gradient(from ${angle}deg, ${joined}, ${stops[0]})`;
+  if (style === 'conic') {
+    return `conic-gradient(from ${angle}deg, ${stops.join(', ')}, ${stops[0]})`;
+  }
+  const waveStops = motion === 'shimmer'
+    ? [...stops, ...[...stops].reverse().slice(1)]
+    : stops;
+  const joined = waveStops.join(', ');
   if (style === 'radial') return `radial-gradient(circle at 30% 30%, ${joined})`;
   return `linear-gradient(${angle}deg, ${joined})`;
 }

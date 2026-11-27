@@ -1,4 +1,5 @@
 import type { ReactNode, SVGProps } from 'react';
+import { Settings } from 'lucide-react';
 
 const paths: Record<string, ReactNode> = {
   chat: <><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8A8.5 8.5 0 0 1 12.5 20a8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></>,
@@ -6,7 +7,7 @@ const paths: Record<string, ReactNode> = {
   market: <><path d="M3 9h18l-1.6 11H4.6L3 9Z"/><path d="M7 9a5 5 0 0 1 10 0M3 13c1.4 0 1.4-1.6 2.8-1.6s1.4 1.6 2.8 1.6 1.4-1.6 2.8-1.6 1.4 1.6 2.8 1.6 1.4-1.6 2.8-1.6 1.4 1.6 2.8 1.6"/></>,
   spark: <><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3Z"/><path d="m19 14 1 2.5 2.5 1-2.5 1L19 21l-1-2.5-2.5-1 2.5-1 1-2.5ZM5 2l.8 2.2L8 5l-2.2.8L5 8l-.8-2.2L2 5l2.2-.8L5 2Z"/></>,
   people: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></>,
-  gear: <><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a7.8 7.8 0 0 1-1.8 1l-.3 1.8h-2.8l-.3-1.8a7.8 7.8 0 0 1-1.8-1l-1.7.7-1.4-2.4L5.1 15a7.8 7.8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a7.8 7.8 0 0 1 1.8-1L8.9 7.4h2.8l.3 1.8a7.8 7.8 0 0 1 1.8 1l1.7-.7 1.4 2.4-1.4 1.1a7.8 7.8 0 0 1 0 2Z" transform="translate(1 0) scale(.92)"/></>,
+  gear: <></>,
   search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
   plus: <><path d="M12 5v14M5 12h14"/></>,
   minus: <path d="M5 12h14"/>,
@@ -62,6 +63,9 @@ const paths: Record<string, ReactNode> = {
 export type IconName = keyof typeof paths;
 
 export function Icon({ name, size = 18, className = '', strokeWidth = 1.8, ...props }: SVGProps<SVGSVGElement> & { name: IconName; size?: number }) {
+  if (name === 'gear') {
+    return <Settings aria-hidden="true" className={className} size={size} strokeWidth={Number(strokeWidth)} {...props} />;
+  }
   return (
     <svg aria-hidden="true" className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" {...props}>
       {paths[name]}

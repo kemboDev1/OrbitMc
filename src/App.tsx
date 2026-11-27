@@ -272,7 +272,7 @@ export default function App() {
       <span className="rail-divider" />
       <nav className="rail-nav" aria-label={t('brand')}>{navItems.map((item) => nav(item, true))}</nav>
       <div className="rail-bottom">
-        <button className={`nav-link rail-link ${view === 'settings' ? 'active' : ''}`} aria-label={t('settings')} title={t('settings')} onClick={() => toView('settings')}><span className="nav-icon"><Icon name="gear" size={19} /></span>{view === 'settings' && <i className="rail-active-dot" />}</button>
+        <button className={`nav-link rail-link ${view === 'settings' ? 'active' : ''}`} aria-label={t('settings')} title={t('settings')} onClick={() => toView('settings')}><span className="nav-icon"><Icon name="gear" size={19} /></span></button>
         <button className={`rail-user ${profileMenu ? 'active' : ''}`} aria-label={t('profile')} onClick={() => { setStatusDraft(user.statusText); setProfileMenu((v) => !v); }}><Avatar user={user} size="sm" showStatus /></button>
       </div>
     </aside>
