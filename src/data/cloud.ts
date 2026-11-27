@@ -20,6 +20,7 @@ interface ProfileRow {
   hide_gift_senders?: boolean | null;
   chat_font?: 'sans' | 'display' | 'mono' | 'serif' | null;
   message_effect?: 'none' | 'glow' | 'aurora' | 'ember' | null;
+  role?: 'member' | 'mod' | 'admin' | null;
   presence: Presence;
   status_text: string;
   created_at: string;
@@ -31,6 +32,7 @@ export interface DirectMessageRow {
   recipient_id: string;
   body: string;
   image: string | null;
+  audio?: string | null;
   sticker: string | null;
   reply_to: string | null;
   edited_at: string | null;
@@ -40,7 +42,7 @@ export interface DirectMessageRow {
 }
 
 interface HubMessageRow {
-  id: string; room_id: string; sender_id: string; body: string; image: string | null; sticker: string | null;
+  id: string; room_id: string; sender_id: string; body: string; image: string | null; audio?: string | null; sticker: string | null;
   reply_to: string | null; edited_at: string | null; pinned: boolean; reactions: Record<string, string[]>; created_at: string;
 }
 
@@ -189,7 +191,10 @@ function toUser(row: ProfileRow, previous?: User): User {
     serverBacked: true,
     bot: undefined,
     auth: undefined,
-    isAdmin: previous?.isAdmin ?? saved?.isAdmin,
+    isAdmin: (row.role === 'admin') || previous?.isAdmin || saved?.isAdmin,
+    role: row.role ?? previous?.role ?? saved?.role ?? 'member',
+    favorites: previous?.favorites ?? saved?.favorites ?? [],
+    xpMilestonesClaimed: previous?.xpMilestonesClaimed ?? saved?.xpMilestonesClaimed ?? [],
     aura: previous?.aura ?? saved?.aura ?? null,
     sparks: previous?.sparks ?? 300,
     inventory: previous?.inventory ?? [],
@@ -212,6 +217,7 @@ function toMessage(row: DirectMessageRow): Message {
     ts: new Date(row.created_at).getTime(),
     remoteCreatedAt: row.created_at,
     image: row.image ?? undefined,
+    audio: row.audio ?? undefined,
     sticker: row.sticker ?? undefined,
     reply: row.reply_to ?? undefined,
     edited: row.edited_at ? new Date(row.edited_at).getTime() : undefined,
@@ -247,7 +253,7 @@ function toHubMessage(row: HubMessageRow): Message {
   return {
     id: row.id, ch: row.room_id, by: row.sender_id, text: row.body,
     ts: new Date(row.created_at).getTime(), remoteCreatedAt: row.created_at,
-    image: row.image ?? undefined, sticker: row.sticker ?? undefined, reply: row.reply_to ?? undefined,
+    image: row.image ?? undefined, audio: row.audio ?? undefined, sticker: row.sticker ?? undefined, reply: row.reply_to ?? undefined,
     edited: row.edited_at ? new Date(row.edited_at).getTime() : undefined,
     pinned: row.pinned || undefined, reactions: row.reactions ?? {},
   };
@@ -649,6 +655,18 @@ export async function adminRemoteGrantSparks(targetUserId: string, amount: numbe
   return data;
 }
 
+export async function adminRemoteSetRole(targetUserId: string, role: 'member' | 'mod' | 'admin'): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc('admin_set_user_role', { target_user_id: targetUserId, next_role: role });
+  if (error) throw new AppError('err.notMember');
+}
+
+export async function adminRemoteDeleteUser(targetUserId: string): Promise<void> {
+  const client = requireSupabase();
+  const { error } = await client.rpc('admin_delete_user', { target_user_id: targetUserId });
+  if (error) throw new AppError('err.notMember');
+}
+
 export async function updateRemoteBlock(userId: string, otherId: string, blocked: boolean): Promise<void> {
   if (userId === otherId) throw new AppError('err.notMember');
   const client = requireSupabase();
@@ -681,6 +699,7 @@ export async function insertRemoteMessage(input: {
   reply?: string;
   sticker?: string;
   image?: string;
+  audio?: string;
 }): Promise<Message> {
   const recipientId = remoteConversation(input.channel, input.userId);
   const client = requireSupabase();
@@ -689,6 +708,7 @@ export async function insertRemoteMessage(input: {
     recipient_id: recipientId,
     body: input.text,
     image: input.image ?? null,
+    audio: input.audio ?? null,
     sticker: input.sticker ?? null,
     reply_to: input.reply ?? null,
   }).select('*').single();

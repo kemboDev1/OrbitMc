@@ -215,6 +215,22 @@ const ru: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [
   emojiTab: 'Эмодзи',
   customAmount: 'Сумма',
   grantBtn: 'Выдать',
+  favorites: 'Избранное',
+  noFavorites: 'Избранных товаров пока нет. Нажмите на сердце на любой карточке.',
+  roleMember: 'Участник',
+  roleMod: 'Модератор',
+  roleAdmin: 'Админ',
+  deleteAccount: 'Удалить аккаунт',
+  deleteAccountConfirm: 'Удалить аккаунт @{name} навсегда? Профиль и переписки будут удалены.',
+  xpGuideTitle: 'Как заработать OrbitXP',
+  xpGuideBody: 'Получайте OrbitXP за покупки в Shop (+65 XP), подарки (+160 XP), теги профиля (+20 XP), подписку Orbit+ (+180…+600 XP) и баланс Sparks. На 50 XP и 100 XP выдаются автоматические подарки и бонусные Sparks!',
+  xpMilestoneToast: 'Достижение: {xp} OrbitXP! Подарок и бонусные Sparks добавлены в профиль.',
+  voiceRecord: 'Записать голос',
+  voiceStop: 'Отправить голос',
+  voiceCancel: 'Отмена записи',
+  voiceMessage: 'Голосовое сообщение',
+  youtubeAttach: 'Видео с YouTube',
+  youtubePrompt: 'Вставьте ссылку на YouTube',
 };
 
 export default ru;

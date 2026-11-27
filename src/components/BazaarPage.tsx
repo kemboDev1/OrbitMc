@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ExternalLink, Lock, Sparkles } from 'lucide-react';
+import { ExternalLink, Heart, Lock, Sparkles } from 'lucide-react';
 import type { DB, Listing, ListingKind, User } from '../data/types';
-import { buyListing, claimDaily, createListing, equipListing, getAura, giftListing, hasAura, removeListing } from '../data/market';
+import { buyListing, claimDaily, createListing, equipListing, getAura, giftListing, hasAura, removeListing, toggleFavoriteListing } from '../data/market';
 import { useI18n } from '../i18n';
 import { AppError } from '../data/errors';
 import { AURA, LIMITS, STUDIO_URL } from '../config';
@@ -22,7 +22,7 @@ const themePresets = [
   { name: 'Paper', dark: false, bg: '#f4f2ec', panel: '#fbf9f4', raised: '#e9e6dc', line: '#d4d1c7', accent: '#f25632' },
 ];
 
-type Kind = 'all' | ListingKind | 'owned' | 'made';
+type Kind = 'all' | ListingKind | 'favorites' | 'owned' | 'made';
 
 function dailyCollected(user: User): boolean {
   if (!user.lastDaily) return false;
@@ -51,10 +51,13 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
   const hasCollectedDaily = dailyCollected(user);
   const all = useMemo(() => Object.values(db.listings).filter((l) => !l.removed), [db.listings]);
   const myListings = all.filter((l) => l.sellerId === user.id);
+  const favIds = user.favorites ?? [];
+  const favorites = all.filter((l) => favIds.includes(l.id));
   const owned = Object.values(db.listings).filter((l) => !l.removed && (user.inventory.includes(l.id) || l.sellerId === user.id));
   const filtered = useMemo(() => {
     let items = all.filter((l) => !l.auraOnly || aura || l.sellerId === user.id);
-    if (kind !== 'all' && kind !== 'owned' && kind !== 'made') items = items.filter((l) => l.kind === kind);
+    if (kind !== 'all' && kind !== 'owned' && kind !== 'made' && kind !== 'favorites') items = items.filter((l) => l.kind === kind);
+    if (kind === 'favorites') items = favorites;
     if (kind === 'owned') items = owned;
     if (kind === 'made') items = myListings;
     const q = query.trim().toLowerCase();
@@ -104,10 +107,17 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
         <p>{t('studioPlatformSub')}</p>
       </div>
       {aura ? (
-        <a className="btn btn-primary" href={studioHref} target="_blank" rel="noopener noreferrer">
-          <span>{t('openStudioPlatform')}</span>
-          <ExternalLink size={15} />
-        </a>
+        STUDIO_URL ? (
+          <a className="btn btn-primary" href={studioHref} target="_blank" rel="noopener noreferrer">
+            <span>{t('openStudioPlatform')}</span>
+            <ExternalLink size={15} />
+          </a>
+        ) : (
+          <button type="button" className="btn btn-primary" onClick={() => window.dispatchEvent(new CustomEvent('orbit:nav', { detail: 'studio' }))}>
+            <Sparkles size={15} />
+            <span>{t('openStudioPlatform')}</span>
+          </button>
+        )
       ) : (
         <button type="button" className="btn btn-outline" onClick={() => { tell(t('studioSubRequired'), 'info'); window.dispatchEvent(new CustomEvent('orbit:nav', { detail: 'aura' })); }}>
           <Lock size={14} />
@@ -117,7 +127,7 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
     </div>
 
     <div className="market-tools">
-      <div className="market-tabs">{(['all', 'bundle', 'theme', 'frame', 'stickers', 'owned', 'made'] as Kind[]).map((k) => <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>{k === 'all' ? t('allItems') : k === 'owned' ? t('bag') : k === 'made' ? t('yourShop') : k === 'bundle' ? t('bundles') : t(k === 'theme' ? 'themes' : k === 'frame' ? 'frames' : 'stickers')}</button>)}</div>
+      <div className="market-tabs">{(['all', 'favorites', 'bundle', 'theme', 'frame', 'stickers', 'owned', 'made'] as Kind[]).map((k) => <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>{k === 'all' ? t('allItems') : k === 'favorites' ? `${t('favorites')} (${favorites.length})` : k === 'owned' ? t('bag') : k === 'made' ? t('yourShop') : k === 'bundle' ? t('bundles') : t(k === 'theme' ? 'themes' : k === 'frame' ? 'frames' : 'stickers')}</button>)}</div>
       <div className="market-filters">
         <label className="market-search"><Icon name="search" size={16} /><input placeholder={t('searchMarket')} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
         <select className="sort-select" aria-label={t('filters')} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}><option value="featured">{t('featured')}</option><option value="latest">{t('latest')}</option><option value="popular">{t('popular')}</option><option value="low">{t('priceLow')}</option><option value="high">{t('priceHigh')}</option></select>
@@ -161,6 +171,7 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
           <div className="product-foot"><span className="seller"><Avatar user={seller} size="xs" />{seller?.name ?? t('you')}</span><span className="product-sales">{l.sales.toLocaleString(lang)} <Icon name="heart" size={12} /></span></div>
           <div className="product-actions">
             {isOwned ? <button className={`btn ${isInUse ? 'btn-secondary' : 'btn-outline'} btn-small`} onClick={() => useItem(l)}>{isInUse ? t('equipped') : t('equip')}</button> : <button className="btn btn-primary btn-small" onClick={() => buy(l)}><Icon name="spark" size={14} />{l.price} {t('sparks')}</button>}
+            <button type="button" className={`icon-btn fav-action ${favIds.includes(l.id) ? 'is-fav' : ''}`} title={t('favorites')} aria-label={t('favorites')} onClick={() => toggleFavoriteListing(user.id, l.id)}><Heart size={15} fill={favIds.includes(l.id) ? 'currentColor' : 'none'} /></button>
             {l.sellerId !== user.id && <button className="icon-btn gift-action" title={t('sendGift')} aria-label={t('sendGift')} onClick={() => setGiftItem(l)}><Icon name="gift" size={15} /></button>}
             {l.sellerId === user.id && <button className="icon-btn danger-ghost" title={t('removeListing')} aria-label={t('removeListing')} onClick={() => remove(l)}><Icon name="trash" size={14} /></button>}
           </div>

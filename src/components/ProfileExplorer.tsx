@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Cake, Calendar, Crown, EyeOff, Gift, Sparkles, Tag, Trophy } from 'lucide-react';
+import { Cake, Calendar, Crown, EyeOff, Gift, HelpCircle, Sparkles, Tag, Trophy } from 'lucide-react';
 import type { DB, GiftRecord, User } from '../data/types';
 import { computeOrbitXP, hasAura } from '../data/market';
 import { fetchPublicProfileDetails } from '../data/cloud';
 import { useI18n } from '../i18n';
 import { Avatar } from './Avatar';
-import { Icon } from './Icons';
 import { bannerStyleFor } from './SettingsPage';
-import { VectorBadge } from './VectorAssets';
+import { VectorBadge, VerifiedBadge } from './VectorAssets';
 
 function isBirthdayToday(birthday?: string): boolean {
   if (!birthday || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return false;
@@ -37,6 +36,7 @@ export function ProfileExplorerContent({
 }) {
   const { t, lang } = useI18n();
   const [, setTick] = useState(0);
+  const [xpGuideOpen, setXpGuideOpen] = useState(false);
 
   useEffect(() => {
     if (!target.serverBacked) return;
@@ -72,13 +72,13 @@ export function ProfileExplorerContent({
 
       <h2 className={targetPro && target.chatFont ? `font-${target.chatFont}` : ''}>
         {target.name}
+        <VerifiedBadge user={target} />
         {targetPro && (
           <span className={`pro-flex-pill tier-${target.aura?.tier ?? 'ember'}`}>
             {target.aura?.tier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}
             {target.aura?.tier === 'nova' ? 'NOVA MAX' : 'ORBIT+'}
           </span>
         )}
-        {target.isAdmin && <span className="admin-tag">{t('admin')}</span>}
       </h2>
 
       <p className="profile-handle">@{target.username}</p>
@@ -96,9 +96,24 @@ export function ProfileExplorerContent({
       <div className="orbit-xp-card">
         <div className="orbit-xp-head">
           <span><Trophy size={13} /> {t('orbitXp')} · Lv.{xpInfo.level} ({xpInfo.rank})</span>
-          <b>{xpInfo.xp.toLocaleString(lang)} XP</b>
+          <span className="orbit-xp-right">
+            <b>{xpInfo.xp.toLocaleString(lang)} XP</b>
+            <button type="button" className="xp-guide-btn" title={t('xpGuideTitle')} aria-label={t('xpGuideTitle')} onClick={() => setXpGuideOpen((v) => !v)}>
+              <HelpCircle size={13} />
+            </button>
+          </span>
         </div>
         <div className="orbit-xp-track"><span style={{ width: `${xpInfo.progressPct}%` }} /></div>
+        {xpGuideOpen && (
+          <div className="xp-guide-box">
+            <b>{t('xpGuideTitle')}</b>
+            <p>{t('xpGuideBody')}</p>
+            <div className="xp-milestones-row">
+              <span className={`pill-mini ${xpInfo.xp >= 50 ? 'ok' : ''}`}>50 XP · +25 Sparks + Gift</span>
+              <span className={`pill-mini ${xpInfo.xp >= 100 ? 'ok' : ''}`}>100 XP · +50 Sparks + Gift</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="profile-facts-grid">

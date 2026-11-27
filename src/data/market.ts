@@ -215,3 +215,61 @@ export function computeOrbitXP(user: User): { xp: number; level: number; rank: s
   const rank = level >= 12 ? 'Celestial' : level >= 7 ? 'Luminary' : level >= 4 ? 'Vanguard' : 'Explorer';
   return { xp, level, rank, nextLevelXp, progressPct };
 }
+
+export function toggleFavoriteListing(userId: string, listingId: string): boolean {
+  let favored = false;
+  db.transaction((d) => {
+    const user = d.users[userId];
+    if (!user) return;
+    const current = user.favorites ?? [];
+    if (current.includes(listingId)) {
+      user.favorites = current.filter((id) => id !== listingId);
+      favored = false;
+    } else {
+      user.favorites = [...current, listingId].slice(-100);
+      favored = true;
+    }
+    saveCosmetics(userId, { favorites: user.favorites });
+  });
+  return favored;
+}
+
+export function checkAndAwardXpMilestones(userId: string): number[] {
+  const awarded: number[] = [];
+  db.transaction((d) => {
+    const user = d.users[userId];
+    if (!user || user.bot) return;
+    const { xp } = computeOrbitXP(user);
+    const claimed = new Set(user.xpMilestonesClaimed ?? []);
+    const milestones = [
+      { threshold: 50, giftId: 'xp_milestone_50', name: 'OrbitXP 50 Milestone Gift', bonusSparks: 25 },
+      { threshold: 100, giftId: 'xp_milestone_100', name: 'OrbitXP 100 Milestone Gift', bonusSparks: 50 },
+    ];
+    for (const m of milestones) {
+      if (xp >= m.threshold && !claimed.has(m.threshold)) {
+        claimed.add(m.threshold);
+        awarded.push(m.threshold);
+        user.sparks = Math.min(99_999, user.sparks + m.bonusSparks);
+        user.giftsReceived = [...new Set([...(user.giftsReceived ?? []), m.giftId])];
+        user.giftsReceivedCount = (user.giftsReceivedCount ?? 0) + 1;
+        user.giftRecords = [
+          {
+            listingId: m.giftId,
+            listingName: m.name,
+            listingKind: 'stickers' as const,
+            fromId: 'orbit-studio',
+            fromUsername: 'orbitstudio',
+            fromName: 'OrbitMc',
+            at: Date.now(),
+          },
+          ...(user.giftRecords ?? []),
+        ].slice(0, 60);
+      }
+    }
+    if (awarded.length > 0) {
+      user.xpMilestonesClaimed = [...claimed];
+      saveCosmetics(userId, { xpMilestonesClaimed: user.xpMilestonesClaimed });
+    }
+  });
+  return awarded;
+}

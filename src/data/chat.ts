@@ -59,17 +59,18 @@ function isRemoteHubChannel(channel: string, userId: string): boolean {
   return Object.values(db.get().hubs).some((hub) => hub.remote && !!hub.members[userId] && hub.rooms.some((room) => room.id === channel));
 }
 
-export function sendMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string; poll?: PollData }): Message | Promise<Message> {
+export function sendMessage(input: { channel: string; userId: string; text: string; reply?: string; sticker?: string; image?: string; audio?: string; poll?: PollData }): Message | Promise<Message> {
   if (!canPostInChannel(input.channel, input.userId)) throw new AppError('err.messageRestricted');
   const text = input.text.replace(/\r\n?/g, '\n').trim();
   const user = db.get().users[input.userId];
   if (!user) throw new AppError('err.notMember');
   const activeAura = getAura(user);
   const imageMax = activeAura?.tier === 'nova' ? LIMITS.imageCharsAura : activeAura ? LIMITS.imageChars : LIMITS.avatarChars;
-  if (!text && !input.sticker && !input.image && !input.poll) throw new AppError('err.emptyMessage');
+  if (!text && !input.sticker && !input.image && !input.audio && !input.poll) throw new AppError('err.emptyMessage');
   const max = activeAura ? AURA[activeAura.tier].maxChars : LIMITS.message;
   if (text.length > max) throw new AppError('err.messageLong');
   if (input.image && (!/^data:image\/(?:jpeg|gif);base64,[a-zA-Z0-9+/=]+$/.test(input.image) || input.image.length > imageMax)) throw new AppError('err.imageTooBig');
+  if (input.audio && (!/^data:audio\/(?:webm|mp4|ogg|mpeg|wav)(?:;codecs=[^;]+)?;base64,[a-zA-Z0-9+/=]+$/i.test(input.audio) || input.audio.length > LIMITS.imageCharsAura)) throw new AppError('err.imageTooBig');
   if (input.sticker && !/^badge:[a-z0-9_-]{2,16}$/i.test(input.sticker) && !/^[\p{Extended_Pictographic}\u200d\ufe0f\u{1f1e6}-\u{1f1ff}]{1,24}$/u.test(input.sticker)) throw new AppError('err.badText');
   const dm = parseDM(input.channel);
   if (dm && dm[0] !== dm[1] && dm.every((id) => db.get().users[id]?.serverBacked)) {
@@ -77,7 +78,7 @@ export function sendMessage(input: { channel: string; userId: string; text: stri
   }
   if (isRemoteHubChannel(input.channel, input.userId)) return insertRemoteHubMessage({ ...input, text });
   const id = uid(18);
-  const msg: Message = { id, ch: input.channel, by: input.userId, text, ts: Date.now(), reactions: {}, reply: input.reply, sticker: input.sticker, image: input.image, poll: input.poll };
+  const msg: Message = { id, ch: input.channel, by: input.userId, text, ts: Date.now(), reactions: {}, reply: input.reply, sticker: input.sticker, image: input.image, audio: input.audio, poll: input.poll };
   db.transaction((d) => {
     d.msgs[input.channel] ??= [];
     if (d.msgs[input.channel].length >= LIMITS.perChannel) d.msgs[input.channel].shift();

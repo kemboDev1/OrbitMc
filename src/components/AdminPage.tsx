@@ -1,15 +1,16 @@
-import { Award, Palette, Sparkles } from 'lucide-react';
+import { Award, Palette, Sparkles, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { AuraTier, DB, Hub, User } from '../data/types';
 import {
   adminAdjustSparks,
   adminDeleteHub,
+  adminDeleteUser,
   adminGrantAura,
   adminSetListingRemoved,
+  adminSetUserRole,
   adminToggleHubPublic,
   adminToggleListingFeatured,
   adminToggleSuspended,
-  adminToggleUserRole,
   getWorkspaceStats,
   isAdminUser,
 } from '../data/admin';
@@ -28,6 +29,7 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
   const [tab, setTab] = useState<AdminTab>('overview');
   const [query, setQuery] = useState('');
   const [deleteHubTarget, setDeleteHubTarget] = useState<Hub | null>(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<User | null>(null);
   const [sparkAmount, setSparkAmount] = useState('500');
 
   const stats = useMemo(() => getWorkspaceStats(db), [db]);
@@ -188,8 +190,23 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
                 </button>
               </div>
               {u.id !== user.id && <>
-                <button className="btn btn-ghost btn-small" onClick={() => { adminToggleUserRole(user.id, u.id); tell(t('memberRoleUpdated'), 'good'); }}>{u.isAdmin ? t('adminRemoveAdmin') : t('adminMakeAdmin')}</button>
+                <select
+                  className="sort-select"
+                  aria-label="Role"
+                  value={u.isAdmin ? 'admin' : u.role ?? 'member'}
+                  onChange={(e) => {
+                    const next = e.target.value as 'member' | 'mod' | 'admin';
+                    void Promise.resolve(adminSetUserRole(user.id, u.id, next))
+                      .then(() => tell(t('memberRoleUpdated'), 'good'))
+                      .catch(() => tell(t('err.generic'), 'bad'));
+                  }}
+                >
+                  <option value="member">{t('roleMember')}</option>
+                  <option value="mod">{t('roleMod')}</option>
+                  <option value="admin">{t('roleAdmin')}</option>
+                </select>
                 <button className={`btn btn-small ${u.suspended ? 'btn-outline' : 'btn-danger-outline'}`} onClick={() => { adminToggleSuspended(user.id, u.id); tell(t('presenceUpdated'), 'good'); }}>{u.suspended ? t('adminUnsuspend') : t('adminSuspend')}</button>
+                <button type="button" className="icon-btn danger-ghost" title={t('deleteAccount')} aria-label={t('deleteAccount')} onClick={() => setDeleteUserTarget(u)}><Trash2 size={14} /></button>
               </>}
             </div>
           </div>
@@ -267,6 +284,18 @@ export function AdminPage({ db, user, onOpenHub }: { db: DB; user: User; onOpenH
       <div className="modal-actions">
         <button className="btn btn-secondary" onClick={() => setDeleteHubTarget(null)}>{t('cancel')}</button>
         <button className="btn btn-danger" onClick={() => { if (deleteHubTarget) { adminDeleteHub(user.id, deleteHubTarget.id); setDeleteHubTarget(null); tell(t('hubLeft'), 'good'); } }}>{t('delete')}</button>
+      </div>
+    </Modal>
+
+    <Modal open={!!deleteUserTarget} onClose={() => setDeleteUserTarget(null)} title={t('deleteAccount')} subtitle={deleteUserTarget ? t('deleteAccountConfirm', { name: deleteUserTarget.username }) : ''} size="sm">
+      <div className="modal-actions">
+        <button className="btn btn-secondary" onClick={() => setDeleteUserTarget(null)}>{t('cancel')}</button>
+        <button className="btn btn-danger" onClick={() => {
+          if (!deleteUserTarget) return;
+          void Promise.resolve(adminDeleteUser(user.id, deleteUserTarget.id))
+            .then(() => { setDeleteUserTarget(null); tell(t('presenceUpdated'), 'good'); })
+            .catch(() => tell(t('err.generic'), 'bad'));
+        }}>{t('delete')}</button>
       </div>
     </Modal>
   </div>;

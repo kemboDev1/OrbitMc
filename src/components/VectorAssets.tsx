@@ -1,8 +1,10 @@
 import {
   Rocket, Crown, Zap, Gem, Flame, Star, Orbit, Heart, ShieldCheck,
-  Sparkles, Music, Code2, Trophy, Compass, Globe, Terminal, Layers, Users, MessageSquare,
+  Sparkles, Music, Code2, Trophy, Compass, Globe, Terminal, Layers, Users, MessageSquare, Award,
 } from 'lucide-react';
 import type { CSSProperties } from 'react';
+import type { User } from '../data/types';
+import { hasAura } from '../data/market';
 
 export interface VectorBadgeDef {
   id: string;
@@ -29,6 +31,13 @@ export const VECTOR_BADGES: VectorBadgeDef[] = [
   { id: 'badge:compass', label: 'Explore', bg: 'linear-gradient(135deg, #3aa8ff, #37d39b)', fg: '#071920', Icon: Compass },
 ];
 
+const BADGE_ALIASES: Record<string, VectorBadgeDef> = {
+  'badge:zap': { id: 'badge:zap', label: 'Volt', bg: 'linear-gradient(135deg, #ffd43b, #ff8a00)', fg: '#1a1204', Icon: Zap },
+  'badge:gem': { id: 'badge:gem', label: 'Prism', bg: 'linear-gradient(135deg, #54a0ff, #8f7dff)', fg: '#ffffff', Icon: Gem },
+  'badge:orbit': { id: 'badge:orbit', label: 'Orbital', bg: 'linear-gradient(135deg, #2193b0, #6dd5ed)', fg: '#071b22', Icon: Orbit },
+  'badge:award': { id: 'badge:award', label: 'Trophy', bg: 'linear-gradient(135deg, #f6d365, #fda085)', fg: '#1f1402', Icon: Award },
+};
+
 export const HUB_ICON_OPTIONS: { key: string; label: string; Icon: typeof Rocket }[] = [
   { key: 'icon:orbit', label: 'Orbit', Icon: Orbit },
   { key: 'icon:rocket', label: 'Team', Icon: Rocket },
@@ -45,13 +54,34 @@ export const HUB_ICON_OPTIONS: { key: string; label: string; Icon: typeof Rocket
 ];
 
 export function VectorBadge({ id, size = 'md' }: { id: string; size?: 'sm' | 'md' | 'lg' }) {
-  const found = VECTOR_BADGES.find((b) => b.id === id);
+  const found = VECTOR_BADGES.find((b) => b.id === id) ?? BADGE_ALIASES[id];
   if (!found) return <span className="vector-emoji-fallback">{id}</span>;
   const { Icon, bg, fg, label } = found;
   const px = size === 'lg' ? 24 : size === 'sm' ? 14 : 18;
   return (
     <span className={`vector-badge vector-badge-${size}`} style={{ background: bg, color: fg } as CSSProperties} title={label}>
       <Icon size={px} strokeWidth={2.2} />
+    </span>
+  );
+}
+
+export function VerifiedBadge({ user, size = 14 }: { user?: User | null; size?: number }) {
+  if (!user) return null;
+  const isAdmin = !!user.isAdmin || user.role === 'admin';
+  const isMod = !isAdmin && user.role === 'mod';
+  const isMax = hasAura(user.id) && user.aura?.tier === 'nova';
+  if (!isAdmin && !isMod && !isMax) return null;
+
+  const variant = isAdmin ? 'admin' : isMod ? 'mod' : 'max';
+  const tip = isAdmin
+    ? 'Verified Admin — Platform administrator & security operator'
+    : isMod
+      ? 'Verified Moderator — Community & Hub safety moderator'
+      : 'Verified Orbit+ Max — Exclusive Nova tier member';
+
+  return (
+    <span className={`vbadge-verified vbadge-${variant}`} title={tip} data-tip={tip} aria-label={tip}>
+      {isAdmin ? <ShieldCheck size={size - 3} strokeWidth={2.4} /> : isMod ? <Star size={size - 3} strokeWidth={2.4} /> : <Crown size={size - 3} strokeWidth={2.4} />}
     </span>
   );
 }

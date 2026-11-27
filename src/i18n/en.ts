@@ -213,6 +213,22 @@ const en = {
   emojiTab: 'Emoji',
   customAmount: 'Amount',
   grantBtn: 'Grant',
+  favorites: 'Favorites',
+  noFavorites: 'No favorite items yet. Tap the heart icon on any Shop asset.',
+  roleMember: 'Member',
+  roleMod: 'Moderator',
+  roleAdmin: 'Admin',
+  deleteAccount: 'Delete account',
+  deleteAccountConfirm: 'Permanently delete @{name}? This removes their profile and conversations.',
+  xpGuideTitle: 'How to earn OrbitXP',
+  xpGuideBody: 'Earn OrbitXP by collecting Shop assets (+65 XP), receiving Gifts (+160 XP), adding Profile Tags (+20 XP), subscribing to Orbit+ (+180 to +600 XP), and keeping Sparks active. Reaching 50 XP and 100 XP automatically awards milestone Gifts & bonus Sparks!',
+  xpMilestoneToast: 'Milestone unlocked: {xp} OrbitXP! Bonus Gift & Sparks added to your profile.',
+  voiceRecord: 'Record voice message',
+  voiceStop: 'Send voice',
+  voiceCancel: 'Cancel recording',
+  voiceMessage: 'Voice message',
+  youtubeAttach: 'Share YouTube link',
+  youtubePrompt: 'Paste YouTube video link',
 } as const;
 
 export default en;

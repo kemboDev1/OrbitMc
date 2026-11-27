@@ -3,7 +3,7 @@ import type { AuraTier } from './data/types';
 /** Rename the product here. */
 export const BRAND = 'OrbitMc';
 
-export const STUDIO_URL = import.meta.env?.VITE_STUDIO_URL?.trim() || 'https://orbit-studio-platform.vercel.app';
+export const STUDIO_URL = import.meta.env?.VITE_STUDIO_URL?.trim() || '';
 
 export const LIMITS = {
   message: 2000,

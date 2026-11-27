@@ -9,7 +9,7 @@ import { subscribeRemoteWorkspace, syncRemoteBlocks, syncRemoteHubMessages, sync
 import { startDM, setPresence } from './data/chat';
 import { AppError } from './data/errors';
 import { joinInvite } from './data/hubs';
-import { hasAura } from './data/market';
+import { hasAura, checkAndAwardXpMilestones } from './data/market';
 import { useI18n, language } from './i18n';
 import { prefs, themeMode } from './lib/prefs';
 import { isStandalone, registerServiceWorker } from './lib/pwa';
@@ -29,13 +29,14 @@ import { AdminPage } from './components/AdminPage';
 import { SearchModal } from './components/SearchModal';
 import { Modal } from './components/Modal';
 import { ProfileExplorerContent } from './components/ProfileExplorer';
+import { StudioView } from './components/StudioView';
 import { ToastHost, tell } from './components/Toast';
 import { isDesktop } from './lib/electron';
 import { useChatControls } from './data/chatControls';
 import { HubSymbol } from './components/VectorAssets';
 import { STUDIO_URL } from './config';
 
-export type View = 'chats' | 'hubs' | 'bazaar' | 'aura' | 'people' | 'settings' | 'admin';
+export type View = 'chats' | 'hubs' | 'bazaar' | 'aura' | 'people' | 'settings' | 'admin' | 'studio';
 type ChatFolder = 'all' | 'direct' | 'hubs' | 'unread';
 
 export default function App() {
@@ -129,6 +130,14 @@ export default function App() {
     const firstJoinedHub = Object.values(data.hubs).find((h) => !!h.members[user.id]);
     setChannel(dm ?? firstJoinedHub?.rooms[0]?.id ?? null);
   }, [user?.id, channel, data.dms, data.hubs]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unlocked = checkAndAwardXpMilestones(user.id);
+    if (unlocked.length > 0) {
+      tell(t('xpMilestoneToast', { xp: unlocked[unlocked.length - 1] }), 'good');
+    }
+  }, [user?.id, user?.inventory.length, user?.giftsReceivedCount, user?.sparks, user?.aura?.tier]);
 
   useEffect(() => {
     if (!user) return;
@@ -336,6 +345,7 @@ export default function App() {
         {view === 'aura' && <AuraPage user={user} />}
         {view === 'settings' && <SettingsPage user={user} onSignedOut={markSignedOut} />}
         {view === 'admin' && <AdminPage db={data} user={user} onOpenHub={openHub} />}
+        {view === 'studio' && <StudioView user={user} db={data} onBackToShop={() => toView('bazaar')} />}
       </div>
       <nav className="mobile-nav" aria-label={t('brand')}>
         {navItems.slice(0, 5).map((item) => (
@@ -351,7 +361,7 @@ export default function App() {
       </nav>
     </main>
 
-    {profileMenu && <><button className="menu-dismiss" aria-label={t('cancel')} onClick={() => setProfileMenu(false)} /><div className="account-popover"><div className="account-popover-head"><Avatar user={user} size="md" /><span><b>{user.name}</b><small>@{user.username}</small></span><span className="account-plan">{userIsPro ? <Icon name="spark" size={12} /> : null}{userIsPro ? user.aura?.tier.toUpperCase() : t('auraFree')}</span></div><div className="status-editor"><label className="field-label">{t('setStatus')}<input className="field-input" value={statusDraft} maxLength={60} placeholder={t('statusPlaceholder')} onChange={(e) => setStatusDraft(e.target.value)} /></label><div><button className="text-action" disabled={presenceBusy} onClick={() => { void Promise.resolve(setPresence(user.id, user.presence, statusDraft)).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('applyStatus')}</button><button className="text-action" disabled={presenceBusy} onClick={() => { setStatusDraft(''); void Promise.resolve(setPresence(user.id, user.presence, '')).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('clearStatus')}</button></div></div><div className="presence-picker"><span>{t('setPresence')}</span>{(['online', 'idle', 'dnd', 'offline'] as User['presence'][]).map((p) => <button key={p} className={user.presence === p ? 'active' : ''} disabled={presenceBusy} onClick={() => { void changePresence(p); }}><i className={`status-mini status-${p}`} />{t(p)}{user.presence === p && <Icon name="check" size={13} />}</button>)}</div><div className="account-popover-links"><button onClick={() => { setProfileMenu(false); setProfileTarget(user.id); }}><Icon name="people" size={15} />{t('myProfile')}</button><button onClick={() => { setProfileMenu(false); toView('settings'); }}><Icon name="gear" size={15} />{t('settings')}</button><button onClick={() => { setProfileMenu(false); toView('aura'); }}><Icon name="spark" size={15} />{t('aura')}</button>{userIsPro && <button onClick={() => { setProfileMenu(false); window.open(studioHref, '_blank', 'noopener,noreferrer'); }}><ExternalLink size={15} />{t('studioPlatform')}</button>}{adminVisible && <button onClick={() => { setProfileMenu(false); toView('admin'); }}><Icon name="shield" size={15} />{t('admin')}</button>}<button className="signout-action" onClick={() => { void signOutNow(); }}><Icon name="back" size={15} />{t('signOut')}</button></div></div></>}
+    {profileMenu && <><button className="menu-dismiss" aria-label={t('cancel')} onClick={() => setProfileMenu(false)} /><div className="account-popover"><div className="account-popover-head"><Avatar user={user} size="md" /><span><b>{user.name}</b><small>@{user.username}</small></span><span className="account-plan">{userIsPro ? <Icon name="spark" size={12} /> : null}{userIsPro ? user.aura?.tier.toUpperCase() : t('auraFree')}</span></div><div className="status-editor"><label className="field-label">{t('setStatus')}<input className="field-input" value={statusDraft} maxLength={60} placeholder={t('statusPlaceholder')} onChange={(e) => setStatusDraft(e.target.value)} /></label><div><button className="text-action" disabled={presenceBusy} onClick={() => { void Promise.resolve(setPresence(user.id, user.presence, statusDraft)).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('applyStatus')}</button><button className="text-action" disabled={presenceBusy} onClick={() => { setStatusDraft(''); void Promise.resolve(setPresence(user.id, user.presence, '')).then(() => tell(t('statusSaved'), 'good')).catch(report); }}>{t('clearStatus')}</button></div></div><div className="presence-picker"><span>{t('setPresence')}</span>{(['online', 'idle', 'dnd', 'offline'] as User['presence'][]).map((p) => <button key={p} className={user.presence === p ? 'active' : ''} disabled={presenceBusy} onClick={() => { void changePresence(p); }}><i className={`status-mini status-${p}`} />{t(p)}{user.presence === p && <Icon name="check" size={13} />}</button>)}</div><div className="account-popover-links"><button onClick={() => { setProfileMenu(false); setProfileTarget(user.id); }}><Icon name="people" size={15} />{t('myProfile')}</button><button onClick={() => { setProfileMenu(false); toView('settings'); }}><Icon name="gear" size={15} />{t('settings')}</button><button onClick={() => { setProfileMenu(false); toView('aura'); }}><Icon name="spark" size={15} />{t('aura')}</button>{userIsPro && <button onClick={() => { setProfileMenu(false); if (STUDIO_URL) { window.open(studioHref, '_blank', 'noopener,noreferrer'); } else { toView('studio'); } }}><ExternalLink size={15} />{t('studioPlatform')}</button>}{adminVisible && <button onClick={() => { setProfileMenu(false); toView('admin'); }}><Icon name="shield" size={15} />{t('admin')}</button>}<button className="signout-action" onClick={() => { void signOutNow(); }}><Icon name="back" size={15} />{t('signOut')}</button></div></div></>}
 
     <Modal open={newChatOpen} onClose={() => setNewChatOpen(false)} title={t('newMessage')} subtitle={t('welcomeSub')} size="sm"><div className="new-chat-list"><label className="mini-search"><Icon name="search" size={15} /><input autoFocus placeholder={t('search')} onChange={(e) => { const q = e.target.value.toLowerCase(); document.querySelectorAll<HTMLButtonElement>('.new-chat-contact').forEach((el) => { el.hidden = !el.dataset.search?.includes(q); }); }} /></label>{contacts.map((p) => <button className="new-chat-contact" data-search={`${p.name} ${p.username}`.toLowerCase()} key={p.id} onClick={() => pickUser(p)}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}</b><small>@{p.username}</small></span><Icon name="arrowUpRight" size={15} /></button>)}{contacts.length === 0 && <p className="modal-demo-note">{t('noPeople')}</p>}</div></Modal>
 

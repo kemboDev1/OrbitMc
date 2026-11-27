@@ -45,7 +45,10 @@ export interface User {
   bot?: boolean;
   serverBacked?: boolean;
   isAdmin?: boolean;
+  role?: 'member' | 'mod' | 'admin';
   suspended?: boolean;
+  favorites?: ID[];
+  xpMilestonesClaimed?: number[];
   aura: AuraSub | null;
   sparks: number;
   inventory: ID[];
@@ -112,6 +115,7 @@ export interface Message {
   pinned?: boolean;
   sticker?: string;
   image?: string;
+  audio?: string;
   poll?: PollData;
 }
 

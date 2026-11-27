@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { BellOff, Clock, Crown, Smile, Sparkles } from 'lucide-react';
+import { BellOff, Clock, Crown, Mic, Smile, Sparkles, Square, Trash2, Video } from 'lucide-react';
 import type { DB, Message, User } from '../data/types';
 import { addReaction, canDeleteMessageForEveryone, canPostInChannel, deleteMessage, editMessage, loadOlderMessages, parseDM, pinMessage, sendMessage, setUserBlocked, startDM, updateRead, votePoll } from '../data/chat';
 import { addRoom, leaveHub } from '../data/hubs';
 import { getAura, hasAura } from '../data/market';
 import { fileToDataUrl } from '../lib/image';
-import { renderRichText } from '../lib/format';
+import { extractYouTubeIds, renderRichText, YouTubeEmbedCard } from '../lib/format';
 import { chime, notify } from '../lib/notify';
 import { prefs } from '../lib/prefs';
 import { fmtTime, uid, cx } from '../lib/util';
@@ -19,7 +19,7 @@ import { tell, tellUndo } from './Toast';
 import { AppError } from '../data/errors';
 import { AURA, LIMITS } from '../config';
 import { clearHistory, deleteConversation, getMuteUntil, hiddenBefore, hideMessage, isMessageHidden, restoreHistory, setMutedFor, useChatControls } from '../data/chatControls';
-import { HubSymbol, VECTOR_BADGES, VectorBadge } from './VectorAssets';
+import { HubSymbol, VECTOR_BADGES, VectorBadge, VerifiedBadge } from './VectorAssets';
 
 const quickEmoji = ['🫶', '😂', '✨', '🤍', '👀', '🔥', '🎧', '🙌', '🥳', '💎', '⚡', '🚀', '🎨', '💬', '👏', '💙', '🌙', '☕'];
 
@@ -58,6 +58,14 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [imageBusy, setImageBusy] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordSecs, setRecordSecs] = useState(0);
+  const [youtubeOpen, setYoutubeOpen] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<number | null>(null);
+  const recordCancelRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const previousChannelRef = useRef<string | null>(null);
   const lastMessageIdRef = useRef<string | undefined>(undefined);
@@ -205,6 +213,77 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       el.focus();
       el.setSelectionRange(start + before.length, start + before.length + selected.length);
     }, 0);
+  };
+
+  const startVoice = async () => {
+    if (recording || !channel || blockedConversation || !canPost) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      tell(t('err.generic'), 'bad');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recordCancelRef.current = false;
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((tr) => tr.stop());
+        if (recordTimerRef.current) window.clearInterval(recordTimerRef.current);
+        setRecording(false);
+        setRecordSecs(0);
+        if (recordCancelRef.current || audioChunksRef.current.length === 0) return;
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+          if (!dataUrl || dataUrl.length > LIMITS.imageCharsAura) {
+            tell(t('err.imageTooBig'), 'bad');
+            return;
+          }
+          void Promise.resolve(sendMessage({ channel, userId: user.id, text: '', audio: dataUrl, reply }))
+            .then(() => { setReply(undefined); if (pref.sound) chime(); })
+            .catch(report);
+        };
+        reader.readAsDataURL(blob);
+      };
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+      setRecordSecs(0);
+      recordTimerRef.current = window.setInterval(() => setRecordSecs((s) => s + 1), 1000);
+    } catch {
+      tell(t('err.generic'), 'bad');
+    }
+  };
+
+  const stopVoice = (cancel = false) => {
+    recordCancelRef.current = cancel;
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop();
+    }
+  };
+
+  const sendYouTube = async (e: FormEvent) => {
+    e.preventDefault();
+    const raw = youtubeUrl.trim();
+    if (!raw || !channel) return;
+    if (!extractYouTubeIds(raw).length) {
+      tell(t('err.badText'), 'bad');
+      return;
+    }
+    try {
+      await sendMessage({ channel, userId: user.id, text: raw, reply });
+      setYoutubeUrl('');
+      setYoutubeOpen(false);
+      setReply(undefined);
+      if (pref.sound) chime();
+    } catch (err) {
+      report(err);
+    }
   };
 
   const attachPicture = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -385,14 +464,16 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
             <div className="message-main">
               {!grouped && <div className="message-byline">
                 <button className={`message-name ${fontClass}`} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}>{person.name}</button>
+                <VerifiedBadge user={person} size={13} />
                 {senderPro && <span className={`pro-flex-pill tier-${senderTier ?? 'ember'}`}>{senderTier === 'nova' ? <Crown size={10} /> : <Sparkles size={10} />}{senderTier === 'nova' ? 'MAX' : 'PRO'}</span>}
-                {person.isAdmin && <span className="admin-tag">{t('admin')}</span>}
                 <time>{fmtTime(msg.ts, lang)}</time>
                 {isMine && <span className="message-mine-tag">{t('you')}</span>}
               </div>}
               {replyMessage && <button className="reply-preview" onClick={() => jumpTo(replyMessage.id)}><Icon name="reply" size={12} /><span>{t('replyBadge')} {data.users[replyMessage.by]?.name ?? t('you')}:</span><em>{replyMessage.text || replyMessage.sticker || replyMessage.poll?.question || '📷'}</em></button>}
               {editId === msg.id ? <form className="edit-message" onSubmit={(e) => { e.preventDefault(); editSave(msg); }}><input ref={editRef} value={editText} maxLength={maxChars} onChange={(e) => setEditText(e.target.value)} /><div><button type="button" className="text-action" onClick={() => setEditId(null)}>{t('cancel')}</button><button type="submit" className="btn btn-primary btn-small">{t('save')}</button></div></form> : <>
                 {msg.text && <div className={`message-text ${fontClass} ${effectClass}`}>{renderRichText(msg.text)}{msg.edited && <span className="edited-label"> · {t('edit').toLowerCase()}</span>}</div>}
+                {msg.text && extractYouTubeIds(msg.text).map((ytId) => <YouTubeEmbedCard key={ytId} videoId={ytId} />)}
+                {msg.audio && <div className="msg-audio-player"><audio controls src={msg.audio} preload="metadata" /></div>}
                 {msg.sticker && <div className="message-sticker"><VectorBadge id={msg.sticker} size="lg" /></div>}
                 {msg.image && <button type="button" className="message-image-btn" onClick={() => setLightboxSrc(msg.image!)}><img className="message-image" src={msg.image} alt="" loading="lazy" /></button>}
                 {msg.poll && <div className="message-poll">
@@ -476,12 +557,21 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
           </div>
         )}
 
-        {isSuspended ? <div className="blocked-composer-note">{t('suspendedNotice')}</div> : blockedConversation ? <div className="blocked-composer-note">{t('blockedConversationSub')}</div> : isBroadcastLocked ? <div className="blocked-composer-note"><Icon name="megaphone" size={15} /> {t('broadcastOnly')}</div> : <div className="composer-box">
+        {isSuspended ? <div className="blocked-composer-note">{t('suspendedNotice')}</div> : blockedConversation ? <div className="blocked-composer-note">{t('blockedConversationSub')}</div> : isBroadcastLocked ? <div className="blocked-composer-note"><Icon name="megaphone" size={15} /> {t('broadcastOnly')}</div> : recording ? (
+          <div className="composer-box voice-rec-bar">
+            <span className="voice-rec-dot" />
+            <span className="voice-rec-time">{Math.floor(recordSecs / 60)}:{String(recordSecs % 60).padStart(2, '0')}</span>
+            <span className="voice-rec-hint">{t('voiceMessage')}</span>
+            <button type="button" className="composer-icon danger-ghost" title={t('voiceCancel')} aria-label={t('voiceCancel')} onClick={() => stopVoice(true)}><Trash2 size={16} /></button>
+            <button type="button" className="send-btn" title={t('voiceStop')} aria-label={t('voiceStop')} onClick={() => stopVoice(false)}><Square size={14} /></button>
+          </div>
+        ) : <div className="composer-box">
           <div className="composer-rail">
             <button className="composer-icon" type="button" title={t('attach')} aria-label={t('attach')} disabled={imageBusy} onClick={() => imageRef.current?.click()}><Icon name="image" size={18} /></button>
             <input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={attachPicture} />
             <button className="composer-gif" type="button" title={t('attachGif')} aria-label={t('attachGif')} disabled={imageBusy} onClick={() => gifRef.current?.click()}>GIF</button>
             <input ref={gifRef} hidden type="file" accept="image/gif" onChange={attachPicture} />
+            <button className="composer-icon" type="button" title={t('youtubeAttach')} aria-label={t('youtubeAttach')} onClick={() => setYoutubeOpen(true)}><Video size={17} /></button>
             {!remoteHistory && <button className="composer-icon" type="button" title={t('createPoll')} aria-label={t('createPoll')} onClick={() => setPollOpen(true)}><Icon name="barChart" size={17} /></button>}
           </div>
           <textarea ref={textareaRef} rows={1} placeholder={imageBusy ? t('loading') : t('messagePlaceholder')} value={composer} maxLength={maxChars} onChange={(e) => setComposer(e.target.value)} onKeyDown={keySend} aria-label={t('messagePlaceholder')} />
@@ -491,6 +581,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
             <button className="composer-fmt-btn" type="button" title={t('formatSpoiler')} onClick={() => wrapSelection('||', '||')}><span>||</span></button>
           </div>
           <button className="composer-icon emoji-toggle" type="button" aria-label={t('emoji')} title={t('emoji')} onClick={() => setEmojiOpen((v) => !v)}><Icon name="smile" size={18} /></button>
+          <button className="composer-icon" type="button" aria-label={t('voiceRecord')} title={t('voiceRecord')} onClick={() => void startVoice()}><Mic size={17} /></button>
           <span className="composer-count">{composer.length > maxChars - 160 ? `${composer.length}/${maxChars}` : ''}</span>
           <button type="submit" className="send-btn" disabled={!composer.trim() || imageBusy} aria-label={t('send')} title={t('send')}><Icon name="send" size={17} /></button>
         </div>}
@@ -534,5 +625,6 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
     <Modal open={confirmBlock} onClose={() => !blockBusy && setConfirmBlock(false)} title={t(blockedConversation ? 'unblockUser' : 'blockUser')} subtitle={t(blockedConversation ? 'unblockConfirm' : 'blockConfirm', { name: other.name })} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setConfirmBlock(false)} disabled={blockBusy}>{t('cancel')}</button><button className={blockedConversation ? 'btn btn-primary' : 'btn btn-danger'} onClick={() => void confirmBlockChange()} disabled={blockBusy}>{t(blockedConversation ? 'unblockUser' : 'blockUser')}</button></div></Modal>
     <Modal open={leaveOpen} onClose={() => setLeaveOpen(false)} title={t('leaveConfirm')} subtitle={t('leaveHubSub')} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setLeaveOpen(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={() => void confirmLeaveHub()}>{t('leaveHub')}</button></div></Modal>
     <Modal open={newRoomOpen} onClose={() => setNewRoomOpen(false)} title={t('addRoom')} subtitle={t('newRoom')} size="sm"><form className="stack-form" onSubmit={createRoom}><label className="field-label">{t('newRoom')}<span className="input-prefix-wrap"><span className="input-prefix">#</span><input autoFocus className="field-input prefix-field" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="behind-the-scenes" maxLength={24} /></span></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setNewRoomOpen(false)}>{t('cancel')}</button><button className="btn btn-primary">{t('create')}</button></div></form></Modal>
+    <Modal open={youtubeOpen} onClose={() => setYoutubeOpen(false)} title={t('youtubeAttach')} subtitle={t('youtubePrompt')} size="sm"><form className="stack-form" onSubmit={sendYouTube}><label className="field-label">YouTube URL<input autoFocus className="field-input" value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=..." /></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={() => setYoutubeOpen(false)}>{t('cancel')}</button><button type="submit" className="btn btn-primary">{t('send')}</button></div></form></Modal>
   </div>;
 }

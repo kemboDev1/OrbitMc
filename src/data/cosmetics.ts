@@ -8,6 +8,9 @@ export interface UserCosmetics {
   accent: string | null;
   aura: AuraSub | null;
   isAdmin?: boolean;
+  role?: 'member' | 'mod' | 'admin';
+  favorites?: ID[];
+  xpMilestonesClaimed?: number[];
   chatFont?: 'sans' | 'display' | 'mono' | 'serif';
   messageEffect?: 'none' | 'glow' | 'aurora' | 'ember';
   banner?: string;

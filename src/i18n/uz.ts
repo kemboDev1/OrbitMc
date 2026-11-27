@@ -214,6 +214,22 @@ const uz: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [
   emojiTab: 'Emoji',
   customAmount: 'Miqdor',
   grantBtn: 'Berish',
+  favorites: 'Sevimlilar',
+  noFavorites: 'Hali sevimli mahsulotlar yo‘q. Do‘kondagi yurakcha tugmasini bosing.',
+  roleMember: 'A’zo',
+  roleMod: 'Moderator',
+  roleAdmin: 'Admin',
+  deleteAccount: 'Akkauntni o‘chirish',
+  deleteAccountConfirm: '@{name} akkauntini butunlay o‘chirasizmi? Profil va suhbatlar o‘chiriladi.',
+  xpGuideTitle: 'OrbitXP qanday yig‘iladi?',
+  xpGuideBody: 'Do‘kondan assetlar olish (+65 XP), Sovg‘a qabul qilish (+160 XP), Profil teglari qo‘shish (+20 XP), Orbit+ obunasi (+180…+600 XP) va Sparks orqali OrbitXP yig‘asiz. 50 XP va 100 XP ga yetganda avtomatik sovg‘a va bonus Sparks beriladi!',
+  xpMilestoneToast: 'Yutuq: {xp} OrbitXP! Profilingizga maxsus sovg‘a va bonus Sparks qo‘shildi.',
+  voiceRecord: 'Ovozli xabar yozish',
+  voiceStop: 'Ovozni yuborish',
+  voiceCancel: 'Bekor qilish',
+  voiceMessage: 'Ovozli xabar',
+  youtubeAttach: 'YouTube video ulashish',
+  youtubePrompt: 'YouTube video havolasini kiriting',
 };
 
 export default uz;

@@ -1,7 +1,7 @@
 import { db } from './db';
 import { AppError } from './errors';
 import { saveCosmetics } from './cosmetics';
-import { adminRemoteGrantSparks } from './cloud';
+import { adminRemoteDeleteUser, adminRemoteGrantSparks, adminRemoteSetRole } from './cloud';
 import type { AuraTier, DB, ID, User } from './types';
 
 export function isAdminUser(user?: User | null): boolean {
@@ -72,6 +72,44 @@ export function adminToggleSuspended(actorId: ID, targetUserId: ID): boolean {
     target.suspended = suspended;
   });
   return suspended;
+}
+
+export async function adminSetUserRole(actorId: ID, targetUserId: ID, role: 'member' | 'mod' | 'admin'): Promise<void> {
+  const state = db.get();
+  const actor = state.users[actorId];
+  const target = state.users[targetUserId];
+  if (!isAdminUser(actor) || !target || target.id === actorId) throw new AppError('err.notMember');
+  if (actor.serverBacked && target.serverBacked) {
+    await adminRemoteSetRole(targetUserId, role);
+  }
+  db.transaction((d) => {
+    const u = d.users[targetUserId];
+    if (!u) throw new AppError('err.notMember');
+    u.role = role;
+    u.isAdmin = role === 'admin';
+    saveCosmetics(targetUserId, { role, isAdmin: u.isAdmin });
+  });
+}
+
+export async function adminDeleteUser(actorId: ID, targetUserId: ID): Promise<void> {
+  const state = db.get();
+  const actor = state.users[actorId];
+  const target = state.users[targetUserId];
+  if (!isAdminUser(actor) || !target || target.id === actorId) throw new AppError('err.notMember');
+  if (actor.serverBacked && target.serverBacked) {
+    await adminRemoteDeleteUser(targetUserId);
+  }
+  db.transaction((d) => {
+    delete d.users[targetUserId];
+    delete d.dms[targetUserId];
+    delete d.reads[targetUserId];
+    for (const ch of Object.keys(d.msgs)) {
+      if (ch.startsWith('dm:') && ch.split(':').includes(targetUserId)) delete d.msgs[ch];
+    }
+    for (const hub of Object.values(d.hubs)) {
+      delete hub.members[targetUserId];
+    }
+  });
 }
 
 export function adminToggleUserRole(actorId: ID, targetUserId: ID): boolean {

@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Play, Video } from 'lucide-react';
 
 function SpoilerSpan({ text }: { text: string }) {
   const [revealed, setRevealed] = useState(false);
@@ -13,6 +14,48 @@ function SpoilerSpan({ text }: { text: string }) {
     >
       {text}
     </span>
+  );
+}
+
+const YT_RE = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[^\s<]*)/gi;
+
+export function extractYouTubeIds(text: string): string[] {
+  const ids = new Set<string>();
+  let match: RegExpExecArray | null;
+  YT_RE.lastIndex = 0;
+  while ((match = YT_RE.exec(text)) !== null) {
+    if (match[1]) ids.add(match[1]);
+  }
+  return [...ids].slice(0, 2);
+}
+
+export function YouTubeEmbedCard({ videoId }: { videoId: string }) {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div className="yt-embed-card" onClick={(e) => e.stopPropagation()}>
+      <div className="yt-embed-head">
+        <Video size={14} />
+        <span>YouTube</span>
+        <a href={`https://www.youtube.com/watch?v=${videoId}`} target="_blank" rel="noopener noreferrer">
+          youtu.be/{videoId}
+        </a>
+      </div>
+      <div className="yt-embed-stage">
+        {playing ? (
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`}
+            title={`YouTube video ${videoId}`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        ) : (
+          <button type="button" className="yt-thumb-btn" onClick={() => setPlaying(true)} aria-label="Play YouTube video">
+            <img src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`} alt="YouTube thumbnail" loading="lazy" />
+            <span className="yt-play-circle"><Play size={22} fill="currentColor" /></span>
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

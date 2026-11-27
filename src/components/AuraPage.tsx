@@ -75,10 +75,17 @@ export function AuraPage({ user }: { user: User }) {
         <p>{t('studioPlatformSub')}</p>
       </div>
       {active ? (
-        <a className="btn btn-primary" href={studioHref} target="_blank" rel="noopener noreferrer">
-          <span>{t('openStudioPlatform')}</span>
-          <ExternalLink size={15} />
-        </a>
+        STUDIO_URL ? (
+          <a className="btn btn-primary" href={studioHref} target="_blank" rel="noopener noreferrer">
+            <span>{t('openStudioPlatform')}</span>
+            <ExternalLink size={15} />
+          </a>
+        ) : (
+          <button type="button" className="btn btn-primary" onClick={() => window.dispatchEvent(new CustomEvent('orbit:nav', { detail: 'studio' }))}>
+            <Sparkles size={15} />
+            <span>{t('openStudioPlatform')}</span>
+          </button>
+        )
       ) : (
         <button type="button" className="btn btn-outline" onClick={() => setSelectPlan('flare')}>
           <Lock size={14} />
