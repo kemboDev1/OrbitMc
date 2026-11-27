@@ -33,8 +33,10 @@ export async function updateProfile(userId: string, input: {
   if (input.profileTemplate !== undefined && !['clean', 'halo', 'frame'].includes(input.profileTemplate)) throw new AppError('err.badText');
   if (input.birthday !== undefined && input.birthday !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(input.birthday)) throw new AppError('err.badText');
   if (currentUser.serverBacked) {
+    const nextFrame = input.banner?.startsWith('frame:') ? input.banner.slice(6) : undefined;
     saveCosmetics(userId, {
       ...(input.banner !== undefined ? { banner: input.banner ?? undefined } : {}),
+      ...(nextFrame ? { frame: nextFrame } : {}),
       ...(input.profileStroke !== undefined ? { profileStroke: input.profileStroke ?? undefined, profileStrokeCustom: !!input.profileStroke } : {}),
       ...(input.profileTags !== undefined ? { profileTags: tags } : {}),
       ...(input.profileTemplate !== undefined ? { profileTemplate: input.profileTemplate } : {}),
@@ -42,7 +44,7 @@ export async function updateProfile(userId: string, input: {
       ...(input.birthdayVisible !== undefined ? { birthdayVisible: input.birthdayVisible } : {}),
       ...(input.hideGiftSenders !== undefined ? { hideGiftSenders: input.hideGiftSenders } : {}),
     });
-    const remoteBanner = input.banner && (input.banner.startsWith('grad:') || input.banner.startsWith('frame:')) ? undefined : input.banner;
+    const remoteBanner = input.banner && (input.banner.startsWith('grad:') || input.banner.startsWith('frame:')) ? null : input.banner;
     await updateRemoteProfile(userId, {
       name,
       bio,
@@ -52,6 +54,15 @@ export async function updateProfile(userId: string, input: {
       profileTags: input.profileTags === undefined ? undefined : tags,
       profileTemplate: input.profileTemplate,
       hideGiftSenders: input.hideGiftSenders,
+    });
+    db.transaction((d) => {
+      const u = d.users[userId];
+      if (!u) return;
+      if (input.banner !== undefined) u.banner = input.banner ?? undefined;
+      if (nextFrame) u.frame = nextFrame;
+      if (input.profileStroke !== undefined) u.profileStroke = input.profileStroke ?? undefined;
+      if (input.profileTags !== undefined) u.profileTags = tags;
+      if (input.profileTemplate !== undefined) u.profileTemplate = input.profileTemplate;
     });
     if (input.birthday !== undefined || input.birthdayVisible !== undefined) {
       await setRemoteBirthday(userId, input.birthday, input.birthdayVisible);

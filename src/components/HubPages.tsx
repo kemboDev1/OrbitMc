@@ -268,7 +268,7 @@ export function PeoplePage({ db, user, onChat }: { db: DB; user: User; onChat: (
       const displayName = chatControls.nicknames?.[p.id] || p.name;
       return (
         <div key={p.id} className="person-card">
-          <button type="button" className="person-card-profile-hit" onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: p.id }))} title={t('profile')}>
+          <button type="button" className="person-card-profile-hit" onClick={() => onChat(p.id)} title={t('dmFrom')}>
             <Avatar user={p} size="lg" showStatus />
             <div className="person-card-info">
               <h3>{displayName}<VerifiedBadge user={p} size={14} /><span className="pill-mini">Lv.{xp.level}</span></h3>
@@ -278,8 +278,8 @@ export function PeoplePage({ db, user, onChat }: { db: DB; user: User; onChat: (
           </button>
           <span className="person-presence"><i className={`status-mini status-${p.presence}`} />{t(p.presence)}</span>
           <div className="person-card-actions">
-            <button type="button" className="btn btn-outline btn-small" title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: p.id }))}><UserIcon size={14} /></button>
-            <button type="button" className="btn btn-primary btn-small" onClick={() => onChat(p.id)}><Icon name="chat" size={14} /></button>
+            <button type="button" className="btn btn-outline btn-small" title={t('profile')} aria-label={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: p.id }))}><UserIcon size={14} /></button>
+            <button type="button" className="btn btn-primary btn-small" title={t('dmFrom')} aria-label={t('dmFrom')} onClick={() => onChat(p.id)}><Icon name="chat" size={14} /></button>
           </div>
         </div>
       );

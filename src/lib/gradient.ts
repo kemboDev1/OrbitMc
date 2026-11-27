@@ -37,11 +37,11 @@ export function buildBannerFlowCss(frame?: FrameData | null): string {
     if (frame.style === 'radial') return `radial-gradient(circle at 30% 30%, ${stops.join(', ')})`;
     return `linear-gradient(${angle}deg, ${stops.join(', ')})`;
   }
-  // Double-period symmetric track: 0% and 100% look identical so conveyor glide never snaps back.
+  // Double-period horizontal track (90deg) aligns identically at 0% and 100% of 200% width for silk-smooth walking flow.
   const rev = [...stops].reverse().slice(1);
   const period = [...stops, ...rev];
   const seamless = [...period, ...period.slice(1)];
-  return `linear-gradient(${angle}deg, ${seamless.join(', ')})`;
+  return `linear-gradient(90deg, ${seamless.join(', ')})`;
 }
 
 export function frameSpeedDuration(speed?: MotionSpeed): string {

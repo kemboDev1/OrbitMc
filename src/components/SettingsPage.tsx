@@ -91,6 +91,10 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
   const [saveBusy, setSaveBusy] = useState(false);
 
   useEffect(() => {
+    setBanner(user.banner ?? (user.frame ? `frame:${user.frame}` : 'grad:cosmic'));
+  }, [user.banner, user.frame]);
+
+  useEffect(() => {
     if (!user.serverBacked) return;
     void fetchPublicProfileDetails(user.id).then((details) => {
       if (!details) return;
@@ -236,7 +240,7 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
           </div>
 
           <form className="profile-settings-form" onSubmit={save}>
-            <div className="avatar-editor"><Avatar user={{ ...user, name, avatar: avatar || undefined, profileStroke: profileStroke || undefined }} size="xl" /><div><strong>{t('avatar')}</strong><p>{t('avatarHelp')}</p><div className="avatar-actions"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden ref={avatarRef} onChange={chooseAvatar} /><button type="button" className="btn btn-outline btn-small" onClick={() => avatarRef.current?.click()}><Icon name="upload" size={14} />{t('changeAvatar')}</button>{avatar && <button type="button" className="btn btn-ghost btn-small" onClick={() => setAvatar('')}>{t('removeAvatar')}</button>}</div></div></div>
+            <div className="avatar-editor"><Avatar user={{ ...user, name, avatar: avatar || undefined, profileStroke: profileStroke || undefined, frame: banner.startsWith('frame:') ? banner.slice(6) : user.frame }} size="xl" /><div><strong>{t('avatar')}</strong><p>{t('avatarHelp')}</p><div className="avatar-actions"><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden ref={avatarRef} onChange={chooseAvatar} /><button type="button" className="btn btn-outline btn-small" onClick={() => avatarRef.current?.click()}><Icon name="upload" size={14} />{t('changeAvatar')}</button>{avatar && <button type="button" className="btn btn-ghost btn-small" onClick={() => setAvatar('')}>{t('removeAvatar')}</button>}</div></div></div>
 
             <div className="profile-fields">
               <label className="field-label">{t('profileName')}<input className="field-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={LIMITS.name} /></label>
