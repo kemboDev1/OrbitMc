@@ -34,8 +34,10 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
   const [emojiTab, setEmojiTab] = useState<'vectors' | 'emoji'>('vectors');
   const [moreFor, setMoreFor] = useState<string | null>(null);
+  const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [membersOpen, setMembersOpen] = useState(false);
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   useEffect(() => { setMembersOpen(Boolean(activeHub && pref.members)); }, [channel, activeHub?.id, pref.members]);
 
   useEffect(() => {
-    setComposer(''); setReply(undefined); setEditId(null); setEmojiOpen(false); setMoreFor(null); setConversationMenuOpen(false);
+    setComposer(''); setReply(undefined); setEditId(null); setEmojiOpen(false); setAttachOpen(false); setMoreFor(null); setActiveMsgId(null); setConversationMenuOpen(false);
     if (channel) updateRead(user.id, channel);
   }, [channel, user.id]);
 
@@ -221,13 +223,19 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const startVoice = async () => {
     if (recording || !channel || blockedConversation || !canPost) return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      tell(t('err.generic'), 'bad');
+      tell(t('err.micUnavailable'), 'bad');
       return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const preferredTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+      const mimeType = preferredTypes.find((type) => typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(type)) ?? '';
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: 32_000 } : { audioBitsPerSecond: 32_000 });
+      } catch {
+        recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      }
       audioChunksRef.current = [];
       recordCancelRef.current = false;
       recorder.ondataavailable = (ev) => {
@@ -239,12 +247,17 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
         setRecording(false);
         setRecordSecs(0);
         if (recordCancelRef.current || audioChunksRef.current.length === 0) return;
-        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const rawType = (recorder.mimeType || mimeType || 'audio/webm').split(';')[0].trim().toLowerCase();
+        const safeType = rawType === 'audio/x-m4a' || rawType === 'audio/aac' ? 'audio/mp4' : rawType;
+        const blob = new Blob(audioChunksRef.current, { type: safeType });
         const reader = new FileReader();
         reader.onloadend = () => {
-          const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-          if (!dataUrl || dataUrl.length > LIMITS.imageCharsAura) {
-            tell(t('err.imageTooBig'), 'bad');
+          const rawUrl = typeof reader.result === 'string' ? reader.result : '';
+          const dataUrl = rawUrl
+            .replace(/^data:audio\/(?:x-m4a|aac)/i, 'data:audio/mp4')
+            .replace(/^(data:audio\/[a-z0-9.+-]+)(?:;[^;]+)?;base64,/i, '$1;base64,');
+          if (!dataUrl || dataUrl.length > LIMITS.audioChars) {
+            tell(t('err.voiceTooBig'), 'bad');
             return;
           }
           void Promise.resolve(sendMessage({ channel, userId: user.id, text: '', audio: dataUrl, reply }))
@@ -254,12 +267,21 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
         reader.readAsDataURL(blob);
       };
       recorderRef.current = recorder;
-      recorder.start();
+      recorder.start(250);
+      setAttachOpen(false);
+      setEmojiOpen(false);
       setRecording(true);
       setRecordSecs(0);
       recordTimerRef.current = window.setInterval(() => setRecordSecs((s) => s + 1), 1000);
-    } catch {
-      tell(t('err.generic'), 'bad');
+    } catch (err) {
+      const name = (err as { name?: string })?.name ?? '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+        tell(t('err.micPermission'), 'bad');
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError' || name === 'NotReadableError') {
+        tell(t('err.micUnavailable'), 'bad');
+      } else {
+        tell(t('err.generic'), 'bad');
+      }
     }
   };
 
@@ -438,7 +460,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
 
       {pinned.length > 0 && <button className="pinned-banner" onClick={() => setPinnedOpen(true)}><Icon name="pin" size={14} /><span><b>{t('pinnedSection')} ({pinned.length})</b><em>{pinned[pinned.length - 1].text || pinned[pinned.length - 1].sticker || (pinned[pinned.length - 1].poll?.question ?? '📷')}</em></span><Icon name="chevron" size={14} /></button>}
 
-      <div className={`message-scroll ${pref.density === 'compact' ? 'compact' : ''} ${messageLayout === 'stream' ? 'stream-layout' : 'bubbles-layout'}`} ref={scrollRef} onScroll={recordScrollPosition} onClick={() => setMoreFor(null)}>
+      <div className={`message-scroll ${pref.density === 'compact' ? 'compact' : ''} ${messageLayout === 'stream' ? 'stream-layout' : 'bubbles-layout'}`} ref={scrollRef} onScroll={recordScrollPosition} onClick={() => { setMoreFor(null); setActiveMsgId(null); }}>
         {remoteHistory && !clearMark && hasOlderHistory && messages.length > 0 && <button className="load-older-messages" onClick={() => void loadOlderHistory()} disabled={loadingOlderHistory}>{t(loadingOlderHistory ? 'loadingOlder' : 'loadOlder')}</button>}
         <div className="conversation-intro">
           {dm && <button type="button" className="intro-avatar" aria-label={t('profile')} title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: other.id }))}><Avatar user={other} size="xl" showStatus /></button>}
@@ -461,8 +483,9 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
           const senderTier = senderPro ? person.aura?.tier : undefined;
           const fontClass = senderPro && person.chatFont ? `font-${person.chatFont}` : '';
           const effectClass = senderPro && person.messageEffect && person.messageEffect !== 'none' ? `effect-${person.messageEffect}` : '';
+          const rowActive = activeMsgId === msg.id || moreFor === `r:${msg.id}` || moreFor === `m:${msg.id}`;
 
-          return <article id={`msg-${msg.id}`} key={msg.id} className={cx('message-row', isMine && 'mine', grouped && 'grouped', msg.pinned && 'message-pinned', effectClass)}>
+          return <article id={`msg-${msg.id}`} key={msg.id} onClick={(e) => { if ((e.target as HTMLElement).closest('button, a, audio, input, form')) return; e.stopPropagation(); setActiveMsgId((cur) => (cur === msg.id ? null : msg.id)); setMoreFor(null); }} className={cx('message-row', isMine && 'mine', grouped && 'grouped', msg.pinned && 'message-pinned', effectClass, rowActive && 'is-active')}>
             {!grouped && <button type="button" className="message-avatar" aria-label={t('profile')} title={t('profile')} onClick={() => window.dispatchEvent(new CustomEvent('sado:profile', { detail: person.id }))}><Avatar user={person} size="sm" /></button>}
             {grouped && <time className="group-time" title={fmtTime(msg.ts, lang)}>{fmtTime(msg.ts, lang)}</time>}
             <div className="message-main">
@@ -561,6 +584,19 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
           </div>
         )}
 
+        {attachOpen && !recording && !blockedConversation && !isSuspended && !isBroadcastLocked && (
+          <div className="composer-attach-menu" role="menu" aria-label={t('attachMore')}>
+            <button type="button" onClick={() => { setAttachOpen(false); imageRef.current?.click(); }}><Icon name="image" size={16} /><span>{t('attach')}</span></button>
+            <button type="button" onClick={() => { setAttachOpen(false); gifRef.current?.click(); }}><span className="attach-gif-pill">GIF</span><span>{t('attachGif')}</span></button>
+            <button type="button" onClick={() => { setAttachOpen(false); setYoutubeOpen(true); }}><Video size={16} /><span>{t('youtubeAttach')}</span></button>
+            {!remoteHistory && <button type="button" onClick={() => { setAttachOpen(false); setPollOpen(true); }}><Icon name="barChart" size={16} /><span>{t('createPoll')}</span></button>}
+            <div className="composer-attach-fmt">
+              <button type="button" title={t('formatBold')} onClick={() => { setAttachOpen(false); wrapSelection('**', '**'); }}><b>B</b></button>
+              <button type="button" title={t('formatCode')} onClick={() => { setAttachOpen(false); wrapSelection('`', '`'); }}><code>&lt;/&gt;</code></button>
+              <button type="button" title={t('formatSpoiler')} onClick={() => { setAttachOpen(false); wrapSelection('||', '||'); }}><span>||</span></button>
+            </div>
+          </div>
+        )}
         {isSuspended ? <div className="blocked-composer-note">{t('suspendedNotice')}</div> : blockedConversation ? <div className="blocked-composer-note">{t('blockedConversationSub')}</div> : isBroadcastLocked ? <div className="blocked-composer-note"><Icon name="megaphone" size={15} /> {t('broadcastOnly')}</div> : recording ? (
           <div className="composer-box voice-rec-bar">
             <span className="voice-rec-dot" />
@@ -570,11 +606,12 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
             <button type="button" className="send-btn" title={t('voiceStop')} aria-label={t('voiceStop')} onClick={() => stopVoice(false)}><Square size={14} /></button>
           </div>
         ) : <div className="composer-box">
+          <input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={attachPicture} />
+          <input ref={gifRef} hidden type="file" accept="image/gif" onChange={attachPicture} />
+          <button className={cx('composer-icon composer-more-btn', attachOpen && 'active')} type="button" title={t('attachMore')} aria-label={t('attachMore')} aria-expanded={attachOpen} onClick={() => { setAttachOpen((v) => !v); setEmojiOpen(false); }}><Icon name={attachOpen ? 'close' : 'plus'} size={18} /></button>
           <div className="composer-rail">
             <button className="composer-icon" type="button" title={t('attach')} aria-label={t('attach')} disabled={imageBusy} onClick={() => imageRef.current?.click()}><Icon name="image" size={18} /></button>
-            <input ref={imageRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={attachPicture} />
             <button className="composer-gif" type="button" title={t('attachGif')} aria-label={t('attachGif')} disabled={imageBusy} onClick={() => gifRef.current?.click()}>GIF</button>
-            <input ref={gifRef} hidden type="file" accept="image/gif" onChange={attachPicture} />
             <button className="composer-icon" type="button" title={t('youtubeAttach')} aria-label={t('youtubeAttach')} onClick={() => setYoutubeOpen(true)}><Video size={17} /></button>
             {!remoteHistory && <button className="composer-icon" type="button" title={t('createPoll')} aria-label={t('createPoll')} onClick={() => setPollOpen(true)}><Icon name="barChart" size={17} /></button>}
           </div>
@@ -584,8 +621,8 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
             <button className="composer-fmt-btn" type="button" title={t('formatCode')} onClick={() => wrapSelection('`', '`')}><code>&lt;/&gt;</code></button>
             <button className="composer-fmt-btn" type="button" title={t('formatSpoiler')} onClick={() => wrapSelection('||', '||')}><span>||</span></button>
           </div>
-          <button className="composer-icon emoji-toggle" type="button" aria-label={t('emoji')} title={t('emoji')} onClick={() => setEmojiOpen((v) => !v)}><Icon name="smile" size={18} /></button>
-          <button className="composer-icon" type="button" aria-label={t('voiceRecord')} title={t('voiceRecord')} onClick={() => void startVoice()}><Mic size={17} /></button>
+          <button className="composer-icon emoji-toggle" type="button" aria-label={t('emoji')} title={t('emoji')} onClick={() => { setEmojiOpen((v) => !v); setAttachOpen(false); }}><Icon name="smile" size={18} /></button>
+          <button className="composer-icon composer-mic-btn" type="button" aria-label={t('voiceRecord')} title={t('voiceRecord')} onClick={() => void startVoice()}><Mic size={17} /></button>
           <span className="composer-count">{composer.length > maxChars - 160 ? `${composer.length}/${maxChars}` : ''}</span>
           <button type="submit" className="send-btn" disabled={!composer.trim() || imageBusy} aria-label={t('send')} title={t('send')}><Icon name="send" size={17} /></button>
         </div>}
@@ -593,7 +630,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
       </form>
     </section>
 
-    {membersOpen && <aside className="members-drawer"><div className="members-head"><strong>{dm ? t('profile') : t('members')}</strong><button className="icon-btn" aria-label={t('cancel')} onClick={() => setMembersOpen(false)}><Icon name="close" size={16} /></button></div>{dm ? <ProfileExplorerContent target={other} viewer={user} db={data} variant="drawer" action={<button className="btn btn-secondary btn-full" onClick={() => setMembersOpen(false)}>{t('backToApp')}</button>} /> : <><div className="member-list">{people.map((p) => <button key={p.id} className="member-row" onClick={() => { if (p.id !== user.id) { setChannel(startDM(user.id, p.id)); setMembersOpen(false); } }}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}<VerifiedBadge user={p} size={13} /></b><small>{p.statusText || t(p.presence)}</small></span>{activeHub?.members[p.id] === 'owner' && <span className="role-chip owner">{t('owner')}</span>}{activeHub?.members[p.id] === 'mod' && <span className="role-chip mod">{t('moderator')}</span>}</button>)}</div><div className="member-drawer-actions">{canManageHub && <button className="btn btn-outline btn-small" onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={14} />{t('hubSettings')}</button>}<button className="btn btn-outline btn-small" onClick={() => setInviteModalOpen(true)}><Icon name="link" size={14} />{t('inviteCopy')}</button>{activeHub!.ownerId !== user.id && <button className="btn btn-ghost btn-small" onClick={() => { setMembersOpen(false); setLeaveOpen(true); }}><Icon name="back" size={14} />{t('leaveHub')}</button>}</div></>}</aside>}
+    {membersOpen && <aside className="members-drawer"><div className="members-head"><strong>{dm ? (otherId === user.id ? t('profile') : t('userProfileTitle', { name: nameOf(other) })) : t('members')}</strong><button className="icon-btn" aria-label={t('cancel')} onClick={() => setMembersOpen(false)}><Icon name="close" size={16} /></button></div>{dm ? <ProfileExplorerContent target={other} viewer={user} db={data} variant="drawer" action={<button className="btn btn-secondary btn-full" onClick={() => setMembersOpen(false)}>{t('backToApp')}</button>} /> : <><div className="member-list">{people.map((p) => <button key={p.id} className="member-row" onClick={() => { if (p.id !== user.id) { setChannel(startDM(user.id, p.id)); setMembersOpen(false); } }}><Avatar user={p} size="sm" showStatus /><span><b>{p.name}<VerifiedBadge user={p} size={13} /></b><small>{p.statusText || t(p.presence)}</small></span>{activeHub?.members[p.id] === 'owner' && <span className="role-chip owner">{t('owner')}</span>}{activeHub?.members[p.id] === 'mod' && <span className="role-chip mod">{t('moderator')}</span>}</button>)}</div><div className="member-drawer-actions">{canManageHub && <button className="btn btn-outline btn-small" onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={14} />{t('hubSettings')}</button>}<button className="btn btn-outline btn-small" onClick={() => setInviteModalOpen(true)}><Icon name="link" size={14} />{t('inviteCopy')}</button>{activeHub!.ownerId !== user.id && <button className="btn btn-ghost btn-small" onClick={() => { setMembersOpen(false); setLeaveOpen(true); }}><Icon name="back" size={14} />{t('leaveHub')}</button>}</div></>}</aside>}
 
     <Modal open={pinnedOpen} onClose={() => setPinnedOpen(false)} title={t('pinnedMessages')} size="md">
       {pinned.length ? <div className="pinned-list">{pinned.map((pm) => <div key={pm.id} className="pinned-item">

@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { passwordScore } from '../lib/crypto';
-import { enterDemoWorkspace, register, resetPassword, signIn } from '../data/auth';
+import { enterDemoWorkspace, register, resendConfirmation, resetPassword, signIn } from '../data/auth';
 import { AppError } from '../data/errors';
 import { Icon } from './Icons';
 import { BrandMark } from './BrandMark';
@@ -24,6 +24,7 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetOpen, setResetOpen] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
 
   const score = useMemo(() => passwordScore(password), [password]);
   const usernameOk = /^[a-z0-9][a-z0-9_]{2,18}[a-z0-9]$/.test(username);
@@ -76,6 +77,23 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
       setResetBusy(false);
     }
   };
+
+  const handleResend = async () => {
+    if (resendBusy || !email.trim()) return;
+    setResendBusy(true);
+    setError('');
+    try {
+      await resendConfirmation(email);
+      setNotice(t('authResent'));
+      tell(t('authResent'), 'good');
+    } catch (err) {
+      setError(err instanceof AppError ? t(err.key) : t('err.generic'));
+    } finally {
+      setResendBusy(false);
+    }
+  };
+
+  const showResend = !!email.trim() && (notice === t('authEmailConfirmation') || error === t('err.emailUnconfirmed'));
 
   return (
     <main className="auth-page">
@@ -171,6 +189,14 @@ export function AuthScreen({ onDone, onCancel, initial = 'signin' }: { onDone: (
 
               {notice && <div className="inline-notice" role="status">{notice}</div>}
               {error && <div className="inline-error" role="alert"><Icon name="info" size={16} /><span>{error}</span></div>}
+              {showResend && (
+                <div className="auth-resend-box">
+                  <button type="button" className="btn btn-outline btn-small" disabled={resendBusy} onClick={() => void handleResend()}>
+                    {resendBusy ? t('loading') : t('authResend')}
+                  </button>
+                  <small>{t('authCheckSpam')}</small>
+                </div>
+              )}
 
               <button className={`btn btn-primary auth-submit ${busy ? 'is-loading' : ''}`} type="submit" disabled={busy}>
                 {busy ? (

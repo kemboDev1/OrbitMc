@@ -18,6 +18,7 @@ export const LIMITS = {
   avatarChars: 60_000,
   imageChars: 320_000,
   imageCharsAura: 640_000,
+  audioChars: 900_000,
   perChannel: 400,
   listings: 12,
   /** OWASP recommendation for PBKDF2-HMAC-SHA256. */

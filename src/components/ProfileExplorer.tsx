@@ -79,7 +79,6 @@ export function ProfileExplorerContent({
     <div className={`${variant === 'drawer' ? 'profile-aside-card' : 'profile-modal-card'} tpl-${target.profileTemplate ?? 'halo'}`}>
       <div className={`${variant === 'drawer' ? 'profile-cover' : 'profile-modal-cover'} ${bannerMotionClassFor(target)}`} style={bannerStyleFor(target)} />
       <Avatar user={target} size={variant === 'drawer' ? 'lg' : 'xl'} showStatus />
-      {variant === 'drawer' && <span className="member-presence">{t(target.presence)}</span>}
 
       <h2 className={targetPro && target.chatFont ? `font-${target.chatFont}` : ''}>
         {customNick || target.name}

@@ -236,6 +236,18 @@ export async function resetPassword(email: string): Promise<void> {
   if (error) throw mapAuthError(error);
 }
 
+export async function resendConfirmation(email: string): Promise<void> {
+  const client = requireSupabase();
+  const normalized = cleanEmail(email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new AppError('err.emailInvalid');
+  const { error } = await client.auth.resend({
+    type: 'signup',
+    email: normalized,
+    options: { emailRedirectTo: getAuthRedirectUrl() },
+  });
+  if (error) throw mapAuthError(error);
+}
+
 export function getCurrentUser(): User | null {
   const id = session.get()?.userId;
   return id ? db.get().users[id] ?? null : null;
