@@ -170,7 +170,8 @@ kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; 
 
 /* Chat */
 .chat-layout { position: relative; display: flex; min-height: 0; height: 100%; flex: 1; overflow: hidden; }
-.channel-rail { display: flex; width: 206px; min-width: 165px; flex: 0 0 206px; flex-direction: column; border-right: 1px solid var(--line); background: var(--side); }
+.channel-rail { display: flex; width: 206px; min-width: 165px; flex: 0 0 206px; flex-direction: column; border-right: 1px solid var(--line); background: var(--side); animation: rail-in .15s ease-out; }
+@keyframes rail-in { from { opacity: .6; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
 .channel-hub-heading { display: flex; align-items: center; gap: 9px; min-height: 66px; padding: 0 12px; border-bottom: 1px solid var(--line-soft); }
 .channel-hub-heading > div { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
 .channel-hub-heading strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

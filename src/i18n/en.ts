@@ -239,6 +239,8 @@ const en = {
   contactNameSaved: 'Display name updated for your chats.',
   contactNameReset: 'Chat & custom name reset.',
   userProfileTitle: '{name}’s Profile',
+  hideRooms: 'Hide rooms',
+  showRooms: 'Show rooms',
   attachMore: 'Attach or format',
   authResend: 'Resend confirmation email',
   authResent: 'Confirmation email requested. Check Inbox and Spam.',

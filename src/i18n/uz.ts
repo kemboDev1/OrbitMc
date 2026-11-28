@@ -241,6 +241,8 @@ const uz: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [
   contactNameSaved: 'Kontakt ismi siz uchun saqlandi.',
   contactNameReset: 'Chat va tahrirlangan ism asl holatiga qaytarildi.',
   userProfileTitle: '{name} profili',
+  hideRooms: 'Xonalarni yashirish',
+  showRooms: 'Xonalarni ko‘rsatish',
   attachMore: 'Biriktirish va format',
   authResend: 'Tasdiqlash xatini qayta yuborish',
   authResent: 'Tasdiqlash xati qayta so‘raldi. Kirish va Spam papkalarini tekshiring.',

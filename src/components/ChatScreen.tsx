@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { BellOff, Clock, Crown, Mic, Smile, Sparkles, Square, Trash2, Video } from 'lucide-react';
+import { BellOff, Clock, Crown, Mic, PanelLeftClose, PanelLeftOpen, Smile, Sparkles, Square, Trash2, Video } from 'lucide-react';
 import type { DB, Message, User } from '../data/types';
 import { addReaction, canDeleteMessageForEveryone, canPostInChannel, deleteMessage, editMessage, loadOlderMessages, parseDM, pinMessage, sendMessage, setUserBlocked, startDM, updateRead, votePoll } from '../data/chat';
 import { addRoom, leaveHub } from '../data/hubs';
@@ -108,6 +108,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   const isBroadcastLocked = !!activeRoom && activeRoom.kind === 'broadcast' && !canPost;
   const isSuspended = !!user.suspended;
   const canManageHub = !!activeHub && ['owner', 'mod'].includes(activeHub.members[user.id] ?? '');
+  const roomsVisible = pref.rooms !== false;
 
   useEffect(() => { setMembersOpen(Boolean(activeHub && pref.members)); }, [channel, activeHub?.id, pref.members]);
 
@@ -410,7 +411,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
   if (!channel) return <div className="empty-conversation"><div className="empty-art"><span /><span /><span /><Icon name="chat" size={27} /></div><h2>{t('quiet')}</h2><p>{t('quietSub')}</p><div className="empty-actions">{onOpenList && <button className="btn btn-outline mobile-only-btn" onClick={onOpenList}><Icon name="menu" size={16} />{t('backToChats')}</button>}<button className="btn btn-primary" onClick={onStartChat}><Icon name="plus" size={16} />{t('startDM')}</button></div></div>;
 
   return <div className="chat-layout">
-    {activeHub && <div className="channel-rail">
+    {activeHub && roomsVisible && <div className="channel-rail">
       <div className="channel-hub-heading">
         <span className="hub-mark" style={{ '--hub-hue': activeHub.hue } as React.CSSProperties}><HubSymbol mark={activeHub.emoji} size={16} /></span>
         <div><strong>{activeHub.name}</strong><small>{people.length} {t('members').toLowerCase()}</small></div>
@@ -430,6 +431,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
           <span className="conversation-title"><strong>{channelTitle}{mutedConversation && <BellOff size={12} className="muted-inline-icon" />}</strong><small>{subtitle}</small></span>
         </button>
         <div className="conversation-tools">
+          {activeHub && <button className={cx('icon-btn', roomsVisible && 'active')} aria-label={t(roomsVisible ? 'hideRooms' : 'showRooms')} title={t(roomsVisible ? 'hideRooms' : 'showRooms')} aria-pressed={roomsVisible} onClick={() => prefs.set({ rooms: !roomsVisible })}>{roomsVisible ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</button>}
           {activeHub && canManageHub && <button className="icon-btn mobile-hub-manage" aria-label={t('hubSettings')} title={t('hubSettings')} onClick={() => setHubManageOpen(true)}><Icon name="sliders" size={16} /></button>}
           {activeHub && <button className="icon-btn" aria-label={t('inviteCopy')} title={t('inviteCopy')} onClick={() => setInviteModalOpen(true)}><Icon name="link" size={15} /></button>}
           {activeHub && <span className="header-people"><AvatarPile people={people.filter((p) => p.presence === 'online')} limit={3} /></span>}
@@ -456,7 +458,7 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
           </div>}</div>}
         </div>
       </header>
-      {activeHub && <div className="mobile-room-strip">{activeHub.rooms.map((room) => <button key={room.id} className={channel === room.id ? 'active' : ''} onClick={() => setChannel(room.id)}><span>{room.kind === 'broadcast' ? <Icon name="megaphone" size={12} /> : '#'}</span>{room.name}</button>)}{canManageHub && <button className="mobile-room-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)}><Icon name="plus" size={14} /></button>}</div>}
+      {activeHub && roomsVisible && <div className="mobile-room-strip">{activeHub.rooms.map((room) => <button key={room.id} className={channel === room.id ? 'active' : ''} onClick={() => setChannel(room.id)}><span>{room.kind === 'broadcast' ? <Icon name="megaphone" size={12} /> : '#'}</span>{room.name}</button>)}{canManageHub && <button className="mobile-room-add" aria-label={t('addRoom')} onClick={() => setNewRoomOpen(true)}><Icon name="plus" size={14} /></button>}</div>}
 
       {pinned.length > 0 && <button className="pinned-banner" onClick={() => setPinnedOpen(true)}><Icon name="pin" size={14} /><span><b>{t('pinnedSection')} ({pinned.length})</b><em>{pinned[pinned.length - 1].text || pinned[pinned.length - 1].sticker || (pinned[pinned.length - 1].poll?.question ?? '📷')}</em></span><Icon name="chevron" size={14} /></button>}
 

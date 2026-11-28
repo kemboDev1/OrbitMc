@@ -242,6 +242,8 @@ const ru: { [K in keyof typeof en]: (typeof en)[K] extends string ? string : { [
   contactNameSaved: 'Имя контакта обновлено для вас.',
   contactNameReset: 'Чат и изменённое имя сброшены.',
   userProfileTitle: 'Профиль {name}',
+  hideRooms: 'Скрыть каналы',
+  showRooms: 'Показать каналы',
   attachMore: 'Вложения и формат',
   authResend: 'Отправить письмо ещё раз',
   authResent: 'Письмо запрошено повторно. Проверьте Входящие и Спам.',

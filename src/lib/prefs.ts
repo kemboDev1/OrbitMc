@@ -11,6 +11,7 @@ export interface Prefs {
   desktop: boolean;
   calm: boolean;
   members: boolean;
+  rooms: boolean;
   enterToSend: boolean;
 }
 
@@ -21,6 +22,7 @@ const defaults: Prefs = {
   desktop: false,
   calm: false,
   members: true,
+  rooms: true,
   enterToSend: true,
 };
 
