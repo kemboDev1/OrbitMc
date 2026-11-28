@@ -10,6 +10,9 @@ import { addRoom, joinInvite, kickHubMember, leaveHub, makeHub, setHubMemberRole
 import { adminAdjustSparks, adminGrantAura, adminToggleListingFeatured, adminToggleSuspended, getWorkspaceStats, isAdminUser } from '../src/data/admin';
 import { buyListing, cancelAura, claimDaily, computeOrbitXP, createListing, equipListing, giftListing, hasAura, subscribeAura } from '../src/data/market';
 import { updateProfile } from '../src/data/profile';
+import { SPARKS_PACKS, startCheckout } from '../src/data/billing';
+import { BRAND_CONFIG } from '../src/brand.config';
+import { isStorageMediaUrl } from '../src/lib/storage';
 import type { User } from '../src/data/types';
 import { releaseAssetFor, type ReleaseAsset } from '../src/lib/downloads';
 
@@ -216,4 +219,26 @@ test('demo workspace, hub templates, polls, broadcast permissions, and admin act
   assert.equal((db.get().dms[demo.id] ?? []).includes(dmId), false);
   assert.equal(getDisplayName(demo.id, member), member.name, 'custom display name resets when conversation is deleted');
   assert.equal(isMuted(demo.id, member.id), false, 'mute state resets when conversation is deleted');
+});
+
+test('commercial billing packs, white-label config, and Storage media URLs validate cleanly', async () => {
+  db.wipe();
+  const demo = enterDemoWorkspace();
+  assert.equal(BRAND_CONFIG.name, 'OrbitMc');
+  assert.ok(SPARKS_PACKS.length >= 3 && BRAND_CONFIG.payments.providers.includes('stripe'));
+
+  const validUrl = 'https://oettqfnoievxxkzsgquh.supabase.co/storage/v1/object/public/uploads/user1/voice/test.webm';
+  assert.equal(isStorageMediaUrl(validUrl), true);
+  assert.equal(isStorageMediaUrl('https://evil.example/a.webm'), false);
+
+  const audioMsg = await sendMessage({ channel: startDM(demo.id, demo.id), userId: demo.id, text: '', audio: validUrl });
+  assert.equal(audioMsg.audio, validUrl);
+
+  const beforeSparks = db.get().users[demo.id].sparks;
+  const packRes = await startCheckout({ userId: demo.id, kind: 'sparks', packId: 'pack_250', provider: 'stripe' });
+  assert.equal(packRes.mode, 'sandbox');
+  assert.equal(db.get().users[demo.id].sparks, beforeSparks + 250);
+
+  await updateProfile(demo.id, { name: demo.name, bio: demo.bio, banner: 'grad:aurora' });
+  assert.equal(db.get().users[demo.id].banner, 'grad:aurora');
 });

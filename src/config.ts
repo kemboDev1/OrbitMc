@@ -1,7 +1,8 @@
 import type { AuraTier } from './data/types';
+import { BRAND_CONFIG } from './brand.config';
 
-/** Rename the product here. */
-export const BRAND = 'OrbitMc';
+/** Rename the product in `src/brand.config.ts`. */
+export const BRAND = BRAND_CONFIG.name;
 
 export const STUDIO_URL = import.meta.env?.VITE_STUDIO_URL?.trim() || '';
 
@@ -41,8 +42,8 @@ export const AURA: Record<AuraTier, {
   stickerPacks: boolean;
 }> = {
   ember: {
-    month: 2.99,
-    year: 29.9,
+    month: BRAND_CONFIG.auraPricing.ember.month,
+    year: BRAND_CONFIG.auraPricing.ember.year,
     stipend: 200,
     daily: 2,
     hubs: 10,
@@ -54,8 +55,8 @@ export const AURA: Record<AuraTier, {
     stickerPacks: true,
   },
   flare: {
-    month: 5.99,
-    year: 59.9,
+    month: BRAND_CONFIG.auraPricing.flare.month,
+    year: BRAND_CONFIG.auraPricing.flare.year,
     stipend: 500,
     daily: 3,
     hubs: 25,
@@ -67,8 +68,8 @@ export const AURA: Record<AuraTier, {
     stickerPacks: true,
   },
   nova: {
-    month: 9.99,
-    year: 99.9,
+    month: BRAND_CONFIG.auraPricing.nova.month,
+    year: BRAND_CONFIG.auraPricing.nova.year,
     stipend: 1200,
     daily: 4,
     hubs: 100,

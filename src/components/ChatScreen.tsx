@@ -4,7 +4,7 @@ import type { DB, Message, User } from '../data/types';
 import { addReaction, canDeleteMessageForEveryone, canPostInChannel, deleteMessage, editMessage, loadOlderMessages, parseDM, pinMessage, sendMessage, setUserBlocked, startDM, updateRead, votePoll } from '../data/chat';
 import { addRoom, leaveHub } from '../data/hubs';
 import { getAura, hasAura } from '../data/market';
-import { fileToDataUrl } from '../lib/image';
+import { processAndUploadImage, uploadMediaBlob } from '../lib/storage';
 import { extractYouTubeIds, renderRichText, YouTubeEmbedCard } from '../lib/format';
 import { chime, notify } from '../lib/notify';
 import { prefs } from '../lib/prefs';
@@ -254,14 +254,23 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
         const reader = new FileReader();
         reader.onloadend = () => {
           const rawUrl = typeof reader.result === 'string' ? reader.result : '';
-          const dataUrl = rawUrl
+          const fallbackDataUrl = rawUrl
             .replace(/^data:audio\/(?:x-m4a|aac)/i, 'data:audio/mp4')
             .replace(/^(data:audio\/[a-z0-9.+-]+)(?:;[^;]+)?;base64,/i, '$1;base64,');
-          if (!dataUrl || dataUrl.length > LIMITS.audioChars) {
+          if (!fallbackDataUrl || (!user.serverBacked && fallbackDataUrl.length > LIMITS.audioChars)) {
             tell(t('err.voiceTooBig'), 'bad');
             return;
           }
-          void Promise.resolve(sendMessage({ channel, userId: user.id, text: '', audio: dataUrl, reply }))
+          const ext = safeType.includes('mp4') ? 'm4a' : safeType.includes('ogg') ? 'ogg' : safeType.includes('mpeg') ? 'mp3' : 'webm';
+          void uploadMediaBlob({
+            userId: user.id,
+            folder: 'voice',
+            blob,
+            ext,
+            serverBacked: user.serverBacked,
+            fallbackDataUrl: fallbackDataUrl.length <= LIMITS.audioChars ? fallbackDataUrl : undefined,
+          })
+            .then((audioUrl) => sendMessage({ channel, userId: user.id, text: '', audio: audioUrl, reply }))
             .then(() => { setReply(undefined); if (pref.sound) chime(); })
             .catch(report);
         };
@@ -320,7 +329,15 @@ export function ChatScreen({ db: data, user, channel, setChannel, onStartChat, o
     try {
       const aura = getAura(user);
       const max = aura?.tier === 'nova' ? LIMITS.imageCharsAura : aura ? LIMITS.imageChars : LIMITS.avatarChars;
-      const image = await fileToDataUrl(file, aura ? 1280 : 720, max, true);
+      const image = await processAndUploadImage({
+        file,
+        userId: user.id,
+        folder: 'chat',
+        maxSide: aura ? 1280 : 720,
+        maxChars: max,
+        preserveGif: true,
+        serverBacked: user.serverBacked,
+      });
       await sendMessage({ channel, userId: user.id, text: composer.trim(), image, reply });
       setComposer(''); setReply(undefined);
     } catch (err) { report(err); }

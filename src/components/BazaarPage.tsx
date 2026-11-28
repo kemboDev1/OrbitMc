@@ -95,6 +95,7 @@ export function BazaarPage({ db, user }: { db: DB; user: User }) {
       <div className="market-copy"><div className="eyebrow">{t('marketEyebrow')}</div><h1>{t('marketTitle')}</h1><p>{t('marketSub')}</p></div>
       <div className="market-wallet">
         <div className="spark-wallet"><Icon name="spark" size={17} /><span><b>{user.sparks.toLocaleString(lang)}</b><small>{t('yourSparks')}</small></span></div>
+        <button className="btn btn-outline btn-small" onClick={() => window.dispatchEvent(new CustomEvent('orbit:nav', { detail: 'aura' }))}><Icon name="plus" size={14} />{t('buyCredits')}</button>
         <button className="btn btn-outline btn-small" onClick={() => void daily()} disabled={hasCollectedDaily}>{hasCollectedDaily ? t('dailyDone') : t('dailyClaim', { count: aura ? AURA[aura.tier].stipend : 25 })}</button>
         <button className="btn btn-primary btn-small" onClick={() => setCreatorOpen(true)}><Icon name="plus" size={15} />{t('makeListing')}</button>
       </div>

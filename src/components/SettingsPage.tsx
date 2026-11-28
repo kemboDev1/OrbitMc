@@ -9,7 +9,7 @@ import { computeOrbitXP, hasAura } from '../data/market';
 import { fetchPublicProfileDetails } from '../data/cloud';
 import { db } from '../data/db';
 import { prefs, themeMode } from '../lib/prefs';
-import { fileToDataUrl } from '../lib/image';
+import { processAndUploadImage } from '../lib/storage';
 import { useI18n, language } from '../i18n';
 import { installApp, installPrompt, isStandalone } from '../lib/pwa';
 import { isDesktop } from '../lib/electron';
@@ -146,14 +146,22 @@ export function SettingsPage({ user, onSignedOut }: { user: User; onSignedOut: (
   const chooseAvatar = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file) return;
-    try { setAvatar(await fileToDataUrl(file, 560, LIMITS.imageChars)); }
+    try {
+      setAvatar(await processAndUploadImage({
+        file, userId: user.id, folder: 'avatars', maxSide: 560, maxChars: LIMITS.imageChars, serverBacked: user.serverBacked,
+      }));
+    }
     catch (err) { tell(err instanceof AppError ? t(err.key) : t('uploadAvatarError'), 'bad'); }
   };
 
   const chooseBanner = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; e.target.value = '';
     if (!file) return;
-    try { setBanner(await fileToDataUrl(file, 960, LIMITS.imageChars)); }
+    try {
+      setBanner(await processAndUploadImage({
+        file, userId: user.id, folder: 'banners', maxSide: 960, maxChars: LIMITS.imageChars, serverBacked: user.serverBacked,
+      }));
+    }
     catch (err) { tell(err instanceof AppError ? t(err.key) : t('uploadAvatarError'), 'bad'); }
   };
 

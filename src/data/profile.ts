@@ -1,4 +1,5 @@
 import { LIMITS } from '../config';
+import { isStorageMediaUrl } from '../lib/storage';
 import { isHex } from '../lib/util';
 import { db } from './db';
 import { AppError } from './errors';
@@ -23,10 +24,10 @@ export async function updateProfile(userId: string, input: {
   const bio = validateBio(input.bio);
   const currentUser = db.get().users[userId];
   if (!currentUser || currentUser.bot) throw new AppError('err.notMember');
-  if (input.avatar !== undefined && input.avatar !== null && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.avatar) || input.avatar.length > LIMITS.imageChars)) {
+  if (input.avatar !== undefined && input.avatar !== null && !isStorageMediaUrl(input.avatar) && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.avatar) || input.avatar.length > LIMITS.imageChars)) {
     throw new AppError('err.imgBig');
   }
-  if (input.banner !== undefined && input.banner !== null && !input.banner.startsWith('grad:') && !input.banner.startsWith('frame:') && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.banner) || input.banner.length > LIMITS.imageChars)) throw new AppError('err.imgBig');
+  if (input.banner !== undefined && input.banner !== null && !isStorageMediaUrl(input.banner) && !input.banner.startsWith('grad:') && !input.banner.startsWith('frame:') && (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(input.banner) || input.banner.length > LIMITS.imageChars)) throw new AppError('err.imgBig');
   if (input.profileStroke !== undefined && input.profileStroke !== null && !/^#[0-9a-f]{6}$/i.test(input.profileStroke)) throw new AppError('err.badText');
   const tags = (input.profileTags ?? currentUser?.profileTags ?? []).map((tag) => tag.trim().replace(/\s+/g, ' ')).filter(Boolean);
   if (tags.length > 5 || tags.some((tag) => tag.length > 20 || !/^[\p{L}\p{N} _-]+$/u.test(tag))) throw new AppError('err.badText');
@@ -44,16 +45,16 @@ export async function updateProfile(userId: string, input: {
       ...(input.birthdayVisible !== undefined ? { birthdayVisible: input.birthdayVisible } : {}),
       ...(input.hideGiftSenders !== undefined ? { hideGiftSenders: input.hideGiftSenders } : {}),
     });
-    const remoteBanner = input.banner && (input.banner.startsWith('grad:') || input.banner.startsWith('frame:')) ? null : input.banner;
     await updateRemoteProfile(userId, {
       name,
       bio,
       avatar: input.avatar,
-      banner: remoteBanner,
+      banner: input.banner,
       profileStroke: input.profileStroke,
       profileTags: input.profileTags === undefined ? undefined : tags,
       profileTemplate: input.profileTemplate,
       hideGiftSenders: input.hideGiftSenders,
+      ...(nextFrame ? { equippedFrame: nextFrame } : {}),
     });
     db.transaction((d) => {
       const u = d.users[userId];
@@ -88,13 +89,18 @@ export async function updateProfile(userId: string, input: {
 }
 
 export function updateProFlex(userId: string, patch: { chatFont?: 'sans' | 'display' | 'mono' | 'serif'; messageEffect?: 'none' | 'glow' | 'aurora' | 'ember' }): void {
+  let serverBacked = false;
   db.transaction((d) => {
     const user = d.users[userId];
     if (!user || user.bot) throw new AppError('err.notMember');
+    serverBacked = !!user.serverBacked;
     if (patch.chatFont !== undefined) user.chatFont = patch.chatFont;
     if (patch.messageEffect !== undefined) user.messageEffect = patch.messageEffect;
     saveCosmetics(userId, { chatFont: user.chatFont, messageEffect: user.messageEffect });
   });
+  if (serverBacked) {
+    void updateRemoteProfile(userId, patch).catch(() => undefined);
+  }
 }
 
 export function updateAccent(userId: string, accent: string | null): void {

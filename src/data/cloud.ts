@@ -20,6 +20,12 @@ interface ProfileRow {
   hide_gift_senders?: boolean | null;
   chat_font?: 'sans' | 'display' | 'mono' | 'serif' | null;
   message_effect?: 'none' | 'glow' | 'aurora' | 'ember' | null;
+  aura_tier?: 'ember' | 'flare' | 'nova' | null;
+  aura_cycle?: 'month' | 'year' | null;
+  aura_renews_at?: string | null;
+  equipped_frame?: string | null;
+  equipped_theme?: string | null;
+  equipped_stickers?: string | null;
   role?: 'member' | 'mod' | 'admin' | null;
   presence: Presence;
   status_text: string;
@@ -199,12 +205,19 @@ function toUser(row: ProfileRow, previous?: User): User {
     role: row.role ?? previous?.role ?? saved?.role ?? 'member',
     favorites: previous?.favorites ?? saved?.favorites ?? [],
     xpMilestonesClaimed: previous?.xpMilestonesClaimed ?? saved?.xpMilestonesClaimed ?? [],
-    aura: previous?.aura ?? saved?.aura ?? null,
+    aura: row.aura_tier && row.aura_renews_at
+      ? {
+          tier: row.aura_tier,
+          cycle: row.aura_cycle ?? 'month',
+          since: new Date(row.created_at).getTime(),
+          renews: new Date(row.aura_renews_at).getTime(),
+        }
+      : (previous?.aura ?? saved?.aura ?? null),
     sparks: previous?.sparks ?? 300,
     inventory: previous?.inventory ?? [],
-    frame: saved?.frame ?? previous?.frame ?? null,
-    theme: saved?.theme ?? previous?.theme ?? null,
-    stickerPack: saved?.stickerPack ?? previous?.stickerPack ?? null,
+    frame: row.equipped_frame ?? saved?.frame ?? previous?.frame ?? null,
+    theme: row.equipped_theme ?? saved?.theme ?? previous?.theme ?? null,
+    stickerPack: row.equipped_stickers ?? saved?.stickerPack ?? previous?.stickerPack ?? null,
     accent: saved?.accent ?? previous?.accent ?? null,
     ring: previous?.ring ?? false,
     lastDaily: previous?.lastDaily ?? 0,
@@ -591,7 +604,7 @@ export function subscribeRemoteWorkspace(userId: string, onError: (error: Error)
   return () => { void client.removeChannel(channel); };
 }
 
-export async function updateRemoteProfile(userId: string, values: { name?: string; bio?: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; profileTags?: string[]; profileTemplate?: 'clean' | 'halo' | 'frame'; hideGiftSenders?: boolean; chatFont?: 'sans' | 'display' | 'mono' | 'serif'; messageEffect?: 'none' | 'glow' | 'aurora' | 'ember'; presence?: Presence; statusText?: string }) {
+export async function updateRemoteProfile(userId: string, values: { name?: string; bio?: string; avatar?: string | null; banner?: string | null; profileStroke?: string | null; profileTags?: string[]; profileTemplate?: 'clean' | 'halo' | 'frame'; hideGiftSenders?: boolean; chatFont?: 'sans' | 'display' | 'mono' | 'serif'; messageEffect?: 'none' | 'glow' | 'aurora' | 'ember'; equippedFrame?: string | null; equippedTheme?: string | null; equippedStickers?: string | null; presence?: Presence; statusText?: string }) {
   const client = requireSupabase();
   const update: Record<string, unknown> = {};
   if (values.name !== undefined) update.display_name = values.name;
@@ -604,6 +617,9 @@ export async function updateRemoteProfile(userId: string, values: { name?: strin
   if (values.hideGiftSenders !== undefined) update.hide_gift_senders = values.hideGiftSenders;
   if (values.chatFont !== undefined) update.chat_font = values.chatFont;
   if (values.messageEffect !== undefined) update.message_effect = values.messageEffect;
+  if (values.equippedFrame !== undefined) update.equipped_frame = values.equippedFrame;
+  if (values.equippedTheme !== undefined) update.equipped_theme = values.equippedTheme;
+  if (values.equippedStickers !== undefined) update.equipped_stickers = values.equippedStickers;
   if (values.presence !== undefined) update.presence = values.presence;
   if (values.statusText !== undefined) update.status_text = values.statusText;
   const { data, error } = await client.from('profiles').update(update).eq('id', userId).select('*').single();

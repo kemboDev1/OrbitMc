@@ -3,7 +3,7 @@ import { uid } from '../lib/util';
 import { db } from './db';
 import { AppError } from './errors';
 import type { AuraTier, Listing, ListingKind, ThemeData, FrameData, User } from './types';
-import { claimRemoteDaily, createRemoteListing, purchaseRemoteListing, removeRemoteListing } from './cloud';
+import { claimRemoteDaily, createRemoteListing, purchaseRemoteListing, removeRemoteListing, updateRemoteProfile } from './cloud';
 import { saveCosmetics } from './cosmetics';
 
 export function getAura(user: User) {
@@ -88,6 +88,14 @@ export function equipListing(userId: string, listingId: string): void {
       banner: user.banner,
       stickerPack: user.stickerPack ?? null,
     });
+    if (user.serverBacked) {
+      void updateRemoteProfile(userId, {
+        equippedTheme: user.theme,
+        equippedFrame: user.frame,
+        equippedStickers: user.stickerPack ?? null,
+        banner: user.banner ?? null,
+      }).catch(() => undefined);
+    }
   });
 }
 

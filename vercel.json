@@ -15,7 +15,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://i.ytimg.com; media-src 'self' data: blob:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://api.github.com https://oettqfnoievxxkzsgquh.supabase.co wss://oettqfnoievxxkzsgquh.supabase.co; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://i.ytimg.com https://*.supabase.co; media-src 'self' data: blob: https://*.supabase.co; frame-src https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://api.github.com https://oettqfnoievxxkzsgquh.supabase.co https://*.supabase.co wss://oettqfnoievxxkzsgquh.supabase.co; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         },
         {
           "key": "X-Content-Type-Options",

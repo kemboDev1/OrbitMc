@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { ExternalLink, Lock, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CreditCard, ExternalLink, Lock, Sparkles } from 'lucide-react';
 import { AURA, FREE, STUDIO_URL } from '../config';
+import type { PaymentProvider, SparksPack } from '../brand.config';
+import { PAYMENT_PROVIDERS, refreshBillingEntitlements, SPARKS_PACKS, startCheckout } from '../data/billing';
 import type { AuraTier, User } from '../data/types';
 import { cancelAura, getAura, hasAura, subscribeAura } from '../data/market';
 import { useI18n } from '../i18n';
@@ -11,10 +13,20 @@ import { tell } from './Toast';
 
 const plans: AuraTier[] = ['ember', 'flare', 'nova'];
 
+const PROVIDER_LABELS: Record<PaymentProvider, string> = {
+  stripe: 'Stripe (Card)',
+  lemonsqueezy: 'LemonSqueezy',
+  click: 'Click (UZ)',
+  payme: 'Payme (UZ)',
+};
+
 export function AuraPage({ user }: { user: User }) {
   const { t, lang } = useI18n();
   const [cycle, setCycle] = useState<'month' | 'year'>('month');
   const [selectPlan, setSelectPlan] = useState<AuraTier | null>(null);
+  const [selectPack, setSelectPack] = useState<SparksPack | null>(null);
+  const [provider, setProvider] = useState<PaymentProvider>(PAYMENT_PROVIDERS[0] ?? 'stripe');
+  const [checkoutNote, setCheckoutNote] = useState('');
   const [cancelOpen, setCancelOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const activeSub = getAura(user);
@@ -26,12 +38,43 @@ export function AuraPage({ user }: { user: User }) {
   const plan = tier ? AURA[tier] : null;
   const studioHref = `${STUDIO_URL}?tier=${activeSub?.tier ?? 'none'}&user=${encodeURIComponent(user.username)}`;
 
-  const subscribe = () => {
-    if (!selectPlan) return;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('billing') === 'success') {
+      void refreshBillingEntitlements(user.id).then(() => {
+        tell(t('billingSuccessNotice'), 'good');
+      }).catch(() => undefined);
+      params.delete('billing');
+      params.delete('order');
+      const clean = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`;
+      window.history.replaceState(null, '', clean);
+    }
+  }, [user.id, t]);
+
+  const subscribe = async () => {
+    if (!selectPlan && !selectPack) return;
     setSaving(true);
-    try { subscribeAura(user.id, selectPlan, cycle); tell(t('subscriptionThanks'), 'good'); setSelectPlan(null); }
-    catch { tell(t('err.generic'), 'bad'); }
-    finally { setSaving(false); }
+    setCheckoutNote('');
+    try {
+      const outcome = await startCheckout(selectPlan
+        ? { userId: user.id, kind: 'aura', tier: selectPlan, cycle, provider }
+        : { userId: user.id, kind: 'sparks', packId: selectPack!.id, provider });
+      if (outcome.mode === 'live' && outcome.url) {
+        window.location.assign(outcome.url);
+        return;
+      }
+      if (outcome.mode === 'sandbox') {
+        tell(selectPlan ? t('subscriptionThanks') : t('billingSuccessNotice'), 'good');
+        setSelectPlan(null);
+        setSelectPack(null);
+        return;
+      }
+      setCheckoutNote(t('checkoutUnconfigured', { provider: PROVIDER_LABELS[provider], order: outcome.orderId?.slice(0, 8) ?? '' }));
+    } catch {
+      tell(t('err.generic'), 'bad');
+    } finally {
+      setSaving(false);
+    }
   };
   const stop = () => { try { cancelAura(user.id); tell(t('subscriptionCancelled'), 'good'); } catch { tell(t('err.generic'), 'bad'); } setCancelOpen(false); };
 
@@ -164,10 +207,56 @@ export function AuraPage({ user }: { user: User }) {
       </table>
     </section>
 
-    <section className="free-note"><div className="free-mark">O+</div><div><h3>{t('auraFree')}</h3><p>{t('includedFree')}</p></div><span className="free-status">{!active ? <><i />{t('currentPlan')}</> : 'PRO ACTIVE'}</span></section>
-    <div className="subscription-fine"><Icon name="shield" size={16} /><p>{t('subscriptionFine')}</p></div>
+    <section className="sparks-packs-section">
+      <div className="plan-section-head">
+        <div><span className="eyebrow">CREDITS TOP-UP</span><h2>{t('sparksPacksTitle')}</h2><p className="field-hint">{t('sparksPacksSub')}</p></div>
+      </div>
+      <div className="sparks-pack-grid">
+        {SPARKS_PACKS.map((pack) => (
+          <article className="sparks-pack-card" key={pack.id}>
+            {pack.badge && <span className="plan-ribbon">{pack.badge}</span>}
+            <div className="sparks-pack-top"><Icon name="spark" size={18} /><strong>{pack.sparks.toLocaleString(lang)} {t('sparks')}</strong></div>
+            <div className="plan-price"><strong>{fmtMoney(pack.priceUsd, lang)}</strong><span>{t('oneTimeLabel')}</span></div>
+            <button type="button" className="btn btn-outline btn-small btn-full" onClick={() => { setCheckoutNote(''); setSelectPlan(null); setSelectPack(pack); }}>
+              <CreditCard size={14} /><span>{t('buyCredits')}</span>
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
 
-    <Modal open={!!selectPlan} onClose={() => setSelectPlan(null)} title={t('activatePreviewPass')} subtitle={t('subscriptionDemo')} size="sm">{selectPlan && <div className="checkout-preview"><div className={`checkout-token plan-${selectPlan}`}><Icon name="spark" size={22} /></div><div className="checkout-copy"><strong>{t(selectPlan === 'ember' ? 'auraEmber' : selectPlan === 'flare' ? 'auraFlare' : 'auraNova')}</strong><span>{fmtMoney(AURA[selectPlan][cycle], lang)} / {cycle === 'month' ? t('cycleMonth').toLowerCase() : t('cycleYear').toLowerCase()}</span></div><div className="demo-payment"><Icon name="info" size={15} /><p>{t('previewPassNote')}</p></div><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setSelectPlan(null)}>{t('cancel')}</button><button className="btn btn-primary" disabled={saving} onClick={subscribe}>{saving ? t('loading') : t('activatePreviewPass')}</button></div></div>}</Modal>
+    <section className="free-note"><div className="free-mark">O+</div><div><h3>{t('auraFree')}</h3><p>{t('includedFree')}</p></div><span className="free-status">{!active ? <><i />{t('currentPlan')}</> : 'PRO ACTIVE'}</span></section>
+    <div className="subscription-fine"><Icon name="shield" size={16} /><p>{t('billingLiveNote')}</p></div>
+
+    <Modal open={!!selectPlan || !!selectPack} onClose={() => { setSelectPlan(null); setSelectPack(null); setCheckoutNote(''); }} title={t('choosePlan')} subtitle={selectPlan ? `${t(selectPlan === 'ember' ? 'auraEmber' : selectPlan === 'flare' ? 'auraFlare' : 'auraNova')} · ${fmtMoney(AURA[selectPlan][cycle], lang)}` : selectPack ? `${selectPack.sparks.toLocaleString(lang)} ${t('sparks')} · ${fmtMoney(selectPack.priceUsd, lang)}` : ''} size="sm">
+      {(selectPlan || selectPack) && (
+        <div className="checkout-preview">
+          <div className={`checkout-token plan-${selectPlan ?? 'flare'}`}><Icon name="spark" size={22} /></div>
+          <div className="checkout-copy">
+            <strong>{selectPlan ? t(selectPlan === 'ember' ? 'auraEmber' : selectPlan === 'flare' ? 'auraFlare' : 'auraNova') : `${selectPack!.sparks.toLocaleString(lang)} ${t('sparks')}`}</strong>
+            <span>{selectPlan ? `${fmtMoney(AURA[selectPlan][cycle], lang)} / ${cycle === 'month' ? t('cycleMonth').toLowerCase() : t('cycleYear').toLowerCase()}` : fmtMoney(selectPack!.priceUsd, lang)}</span>
+          </div>
+          {user.serverBacked && (
+            <div className="provider-picker">
+              <span className="field-label">{t('paymentMethod')}</span>
+              <div className="provider-grid">
+                {PAYMENT_PROVIDERS.map((p) => (
+                  <button key={p} type="button" className={`provider-pill ${provider === p ? 'selected' : ''}`} onClick={() => { setProvider(p); setCheckoutNote(''); }}>
+                    <CreditCard size={13} /><span>{PROVIDER_LABELS[p]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="demo-payment"><Icon name="shield" size={15} /><p>{t(user.serverBacked ? 'billingLiveNote' : 'previewPassNote')}</p></div>
+          {checkoutNote && <div className="inline-note" role="status"><Icon name="info" size={15} /><span>{checkoutNote}</span></div>}
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={() => { setSelectPlan(null); setSelectPack(null); setCheckoutNote(''); }}>{t('cancel')}</button>
+            <button className="btn btn-primary" disabled={saving} onClick={() => void subscribe()}>{saving ? t('loading') : t(user.serverBacked ? 'continueCheckout' : 'activatePreviewPass')}</button>
+          </div>
+        </div>
+      )}
+    </Modal>
     <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title={t('cancelConfirm')} subtitle={t('cancelSub', { date: sub ? fmtDate(Math.abs(sub.renews), lang) : '' })} size="sm"><div className="modal-actions"><button className="btn btn-secondary" onClick={() => setCancelOpen(false)}>{t('cancel')}</button><button className="btn btn-danger" onClick={stop}>{t('cancelPlan')}</button></div></Modal>
   </div>;
 }

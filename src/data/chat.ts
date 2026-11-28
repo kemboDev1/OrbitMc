@@ -1,4 +1,5 @@
 import { AURA, LIMITS } from '../config';
+import { isStorageMediaUrl } from '../lib/storage';
 import { uid } from '../lib/util';
 import { db } from './db';
 import { AppError } from './errors';
@@ -69,8 +70,8 @@ export function sendMessage(input: { channel: string; userId: string; text: stri
   if (!text && !input.sticker && !input.image && !input.audio && !input.poll) throw new AppError('err.emptyMessage');
   const max = activeAura ? AURA[activeAura.tier].maxChars : LIMITS.message;
   if (text.length > max) throw new AppError('err.messageLong');
-  if (input.image && (!/^data:image\/(?:jpeg|gif);base64,[a-zA-Z0-9+/=]+$/.test(input.image) || input.image.length > imageMax)) throw new AppError('err.imageTooBig');
-  if (input.audio && (!/^data:audio\/(?:webm|mp4|ogg|mpeg|wav|aac)(?:;\s*codecs=[^;]+)?;base64,[a-zA-Z0-9+/=]+$/i.test(input.audio) || input.audio.length > LIMITS.audioChars)) throw new AppError('err.voiceTooBig');
+  if (input.image && !isStorageMediaUrl(input.image) && (!/^data:image\/(?:jpeg|gif);base64,[a-zA-Z0-9+/=]+$/.test(input.image) || input.image.length > imageMax)) throw new AppError('err.imageTooBig');
+  if (input.audio && !isStorageMediaUrl(input.audio) && (!/^data:audio\/(?:webm|mp4|ogg|mpeg|wav|aac)(?:;\s*codecs=[^;]+)?;base64,[a-zA-Z0-9+/=]+$/i.test(input.audio) || input.audio.length > LIMITS.audioChars)) throw new AppError('err.voiceTooBig');
   if (input.sticker && !/^badge:[a-z0-9_-]{2,16}$/i.test(input.sticker) && !/^[\p{Extended_Pictographic}\u200d\ufe0f\u{1f1e6}-\u{1f1ff}]{1,24}$/u.test(input.sticker)) throw new AppError('err.badText');
   const dm = parseDM(input.channel);
   if (dm && dm[0] !== dm[1] && dm.every((id) => db.get().users[id]?.serverBacked)) {
