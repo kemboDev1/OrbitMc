@@ -606,9 +606,23 @@ kbd { display: inline-grid; place-items: center; min-width: 19px; height: 19px; 
   }
   .auth-spinner-ring, .loader-halo-ring, .spin-icon, .spinner { animation-duration: 1s !important; }
 }
-.calm *:not(.auth-spinner-ring):not(.loader-halo-ring):not(.loader-beam):not(.loader-beam > span):not(.spin-icon):not(.spinner),
+.calm *,
 .calm *::before,
 .calm *::after { scroll-behavior: auto; animation: none !important; transition: none !important; }
+.calm .auth-spinner-ring,
+.calm .spin-icon,
+.calm .spinner { animation: orbit-spin .8s linear infinite !important; }
+.calm .loader-halo-ring { animation: orbit-spin 1.15s linear infinite !important; }
+.calm .loader-beam > span { animation: loader-slide 1.1s ease-in-out infinite !important; }
+.calm .avatar-frame-spin::before,
+.calm .avatar-frame-shimmer::before,
+.calm .frame-halo-ring.avatar-frame-spin { animation: frame-spin var(--frame-speed, 2.4s) linear infinite !important; }
+.calm .frame-halo-ring.avatar-frame-shimmer { animation: gradient-shimmer var(--frame-speed, 3s) ease infinite !important; }
+.calm .avatar-frame-pulse,
+.calm .frame-halo-ring.avatar-frame-pulse { animation: halo-breathe var(--frame-speed, 3.2s) ease-in-out infinite !important; }
+.calm .banner-animated.avatar-frame-shimmer,
+.calm .banner-animated.avatar-frame-spin,
+.calm .banner-animated.avatar-frame-pulse { animation: banner-flow var(--frame-speed, 3.2s) linear infinite !important; }
 
 .app-shell[data-color-theme='light'] { --ink: #282520; --muted: #625e56; --faint: #706c64; --accent-ink: #160a05; --success: #168759; --danger: #bb4949; --bubble: var(--raised); }
 .app-shell[data-color-theme='dark'] { --ink: #eae6df; --muted: #9c978f; --faint: #69665f; --accent-ink: #160a05; --success: #46cf91; --danger: #f06565; }
